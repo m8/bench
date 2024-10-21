@@ -36,8 +36,14 @@ function init_bench {
     mkdir -p $APP_DIR
 }
 
-function set_performance {
+function runner_set_performance {
     echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-    echo 3400000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq
-    echo 3400000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
+    echo 2600000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq
+    echo 2600000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
+}
+
+function runner_restore_system_settings {
+    echo "madvise" | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+    echo "Benchmark ended at $(date)"
+    echo "Runner exiting ..."
 }
