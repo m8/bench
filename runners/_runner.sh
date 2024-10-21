@@ -1,6 +1,6 @@
 #!/bin/bash
 
-function log_basics {
+function runner_log_basics {
     echo "++++++++++++++++++++"
     echo "Time: $(date)"
     echo "APP_DIR: $APP_DIR"
@@ -31,7 +31,7 @@ function get_machine_details {
     echo ""
 }
 
-function init_bench {
+function runner_init_bench {
     mkdir -p $RES_DIR
     mkdir -p $APP_DIR
 }
