@@ -23,3 +23,7 @@ function liblinear_default {
     
     { /usr/bin/time taskset -c 0-$(echo "$THREADS - 1" | bc) ./train -s 6 -m 20 $DATASET_DIR/kdd12 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log; } 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
 }
+
+function liblinear_parser {
+    grep "system" $RES_DIR/${BENCHMARK}${SUFFIX}.log | awk '{print $1}' | sed 's/elapsed//g'
+}
