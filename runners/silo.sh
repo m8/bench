@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================
-BENCHMARK="xsbench"
+BENCHMARK="silo"
 THREADS=20
 # ============================
 
@@ -19,10 +19,16 @@ SUFFIX=""
 
 runner_init_bench
 
-xsbench_default() {
+function silo_default {
     pushd $APP_DIR
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
-    taskset -c 0-$(echo "$THREADS - 1" | bc) ./openmp-threading/XSBench -t $THREADS -g 30000 -p 30000000 >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    taskset -c 0-$(echo "$THREADS - 1" | bc) ./out-perf.masstree/benchmarks/dbtest  --verbose --bench tpcc --num-threads 8 --scale-factor 28 --runtime 30 --numa-memory 24G
 }
 
+
+# Return formatt
+# Average Time:        xxx.xx
+function silo_parser {
+    grep "Average Time" $RES_DIR/gapbs${SUFFIX}.log | awk '{print $3}'       
+}
