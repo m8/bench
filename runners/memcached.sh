@@ -21,11 +21,11 @@ fi
 runner_init_bench
 
 
-# $1: Size of db: default 10GB
-# $2: Size of the object: default 1024B
+# $1: Size of db: default 200MB
+# $2: Size of the object: default 64B
 function setup_memcached_database {
-    size_db=10
-    obj_size=1024
+    size_db=200
+    obj_size=64
 
     # check if parameters are passed
     if [ ! -z "$1" ]; then
@@ -38,8 +38,8 @@ function setup_memcached_database {
     sudo killall -9 memcached
     sudo systemctl stop memcached
 
-    TOTAL_KEYS=$((size_db * 1024 * 1024 * 1024 / $obj_size))
-    MEMCACHED_MEMORY=$((size_db * 1024))  # 12GB in MB
+    TOTAL_KEYS=$((size_db * 1024 * 1024 / obj_size))
+    MEMCACHED_MEMORY=$((size_db+200))
     echo "mem: $MEMCACHED_MEMORY"
 
     $MEMCACHED_BIN -d -m $MEMCACHED_MEMORY -p 11211 -t 32 &
