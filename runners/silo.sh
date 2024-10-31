@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================
 BENCHMARK="silo"
-THREADS=20
+THREADS=16
 # ============================
 
 # == Do not edit ==
@@ -19,16 +19,40 @@ SUFFIX=""
 
 runner_init_bench
 
-function silo_default {
+function silo_tpcc {
     pushd $APP_DIR
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
-    taskset -c 0-$(echo "$THREADS - 1" | bc) ./out-perf.masstree/benchmarks/dbtest  --verbose --bench tpcc --num-threads 8 --scale-factor 28 --runtime 30 --numa-memory 24G
+    taskset -c 0-$(echo "$THREADS - 1" | bc)  \
+        ./out-perf.masstree/benchmarks/dbtest \  
+            --verbose --bench tpcc \ 
+            --num-threads $THREADS \
+            --scale-factor --runtime 60  \
+        2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    popd
+}
+
+function silo_ycsb {
+    pushd $APP_DIR
+    echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+
+    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+        ./out-perf.masstree/benchmarks/dbtest \
+        --verbose --bench ycsb \
+        --num-threads $THREADS \
+        --runtime 30 \
+        --scale 32000 \
+        --numa-memory 24G \
+        2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    popd
 }
 
 
 # Return formatt
-# Average Time:        xxx.xx
+# agg_throughput: xxx ops/sec
 function silo_parser {
-    grep "Average Time" $RES_DIR/gapbs${SUFFIX}.log | awk '{print $3}'       
+    local file=$RES_DIR/${BENCHMARK}${SUFFIX}.log
+    local result=$(grep "agg_throughput" $file | awk '{print $2}')
+    echo $result
 }
