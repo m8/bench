@@ -48,7 +48,6 @@ function silo_ycsb {
     popd
 }
 
-
 # Return format
 # agg_throughput: xxx ops/sec
 function silo_parser {
