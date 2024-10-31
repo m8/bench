@@ -49,7 +49,7 @@ function silo_ycsb {
 }
 
 
-# Return formatt
+# Return format
 # agg_throughput: xxx ops/sec
 function silo_parser {
     local file=$RES_DIR/${BENCHMARK}${SUFFIX}.log
