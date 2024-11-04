@@ -1,5 +1,6 @@
+# Memory Intensive Benchmarking Suite (MIBS)
 
-several scripts to run different benchmarks
+Benchmarks for understanding memory related bottleneceks and optimizations.
 
 - gapbs: graph benchmarks
 - liblinear: linear classification
@@ -10,7 +11,7 @@ several scripts to run different benchmarks
 install:
 ```bash 
 cd install
-bash install_gapbs.sh
+bash gapbs.sh
 ```
 
 usage:
@@ -18,3 +19,17 @@ usage:
 cd runners
 source gapbs.sh && gapbs_default && gapbs_parser
 ```
+
+
+## Suite 1
+
+```
+cd install
+bash gapbs.sh && bash metis.sh && bash silo.sh
+```
+
+```
+
+```
+
+### Will it scale
