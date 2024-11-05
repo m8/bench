@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================
 BENCHMARK="silo"
-THREADS=16
+THREADS=20
 # ============================
 
 # == Do not edit ==
@@ -23,11 +23,13 @@ function silo_tpcc {
     pushd $APP_DIR
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
-    taskset -c 0-$(echo "$THREADS - 1" | bc)  \
-        ./out-perf.masstree/benchmarks/dbtest \  
-            --verbose --bench tpcc \ 
-            --num-threads $THREADS \
-            --scale-factor --runtime 60  \
+    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+        ./out-perf.masstree/benchmarks/dbtest \
+        --verbose --bench tpcc \
+        --num-threads $THREADS \
+        --scale-factor $THREADS \
+        --runtime 30 \
+        --numa-memory 24G \
         2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
     popd
 }
