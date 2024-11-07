@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================
 BENCHMARK="silo"
-THREADS=16
+THREADS=20
 # ============================
 
 # == Do not edit ==
@@ -23,11 +23,13 @@ function silo_tpcc {
     pushd $APP_DIR
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
-    taskset -c 0-$(echo "$THREADS - 1" | bc)  \
-        ./out-perf.masstree/benchmarks/dbtest \  
-            --verbose --bench tpcc \ 
-            --num-threads $THREADS \
-            --scale-factor --runtime 60  \
+    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+        ./out-perf.masstree/benchmarks/dbtest \
+        --verbose --bench tpcc \
+        --num-threads 32 \
+        --scale-factor 20 \
+        --retry-aborted-transactions \
+        --ops-per-worker 10000000 \
         2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
     popd
 }
@@ -41,12 +43,32 @@ function silo_ycsb {
         ./out-perf.masstree/benchmarks/dbtest \
         --verbose --bench ycsb \
         --num-threads $THREADS \
-        --runtime 30 \
-        --scale 32000 \
-        --numa-memory 24G \
-        2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+        --runtime 60 \
+        --scale-factor 32000 \
+        --numa-memory 24G 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
     popd
 }
+
+# $1: zipfian constant
+# Values: 0.0, 0.1, 0.99, 1.5, -1
+# Default: 0.99
+function silo_ycsb_zipfian {
+    local zipfian=${1:-0.99}
+    pushd $APP_DIR
+    echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+
+    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+        ./out-perf.masstree/benchmarks/dbtest \
+        --verbose --bench ycsb \
+        --num-threads $THREADS \
+        --runtime 60 \
+        --scale-factor 32000 \
+        --numa-memory 24G \
+        -o "--zipfian-alpha $zipfian" 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    popd
+}
+
 
 # Return format
 # agg_throughput: xxx ops/sec
