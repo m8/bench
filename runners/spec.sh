@@ -44,7 +44,6 @@ function spec_custom_run {
 
     pushd $APP_DIR/benchspec/CPU/$1/run/run_base_refspeed_mytest-m64.0000/
 
-    # switch benchmark name
     case $1 in
         "603.bwaves_s")
             killall $(get_bwaves_pid)

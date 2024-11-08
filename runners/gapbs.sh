@@ -23,14 +23,15 @@ function gapbs_default {
     pushd $APP_DIR
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
-    taskset -c 0-$(echo "$THREADS - 1" | bc) ./pr -f benchmark/graphs/twitter.sg -n 2 -i1000 -t1e-4 >> $RES_DIR/gapbs${SUFFIX}.log
+    taskset -c 0-$(echo "$THREADS - 1" | bc) ./pr -f benchmark/graphs/twitter.sg -n 5 -i1000 -t1e-4 >> $RES_DIR/gapbs${SUFFIX}.log
+    popd
 }
 
 function gapbs_bc {
     pushd $APP_DIR
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
-    taskset -c 0-$(echo "$THREADS - 1" | bc) ./bc -f benchmark/graphs/twitter.sg -n 2 -i1000 -t1e-4 >> $RES_DIR/gapbs${SUFFIX}.log
+    taskset -c 0-$(echo "$THREADS - 1" | bc) ./bc -f benchmark/graphs/twitter.sg -n 5 -i1000 -t1e-4 >> $RES_DIR/gapbs${SUFFIX}.log
 }
 
 
