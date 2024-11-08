@@ -43,6 +43,9 @@ do
     parsecmgmt -a build -p "splash2x.$bench"
 done
 
+# Sometimes there are some errors while running
+find . -name run.sh -exec chmod +x {} \;
+
 
 echo "Done installing Parsec benchmarks."
 
