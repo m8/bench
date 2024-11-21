@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================
 BENCHMARK="silo"
-THREADS=20
+THREADS=${THREADS:-20}
 # ============================
 
 # == Do not edit ==
@@ -15,6 +15,7 @@ APP_DIR=$APP_DIR/${BENCHMARK}
 RES_DIR=$RES_DIR/${BENCHMARK}
 DATASET_DIR=$DATASET_DIR/${BENCHMARK}
 SUFFIX=""
+PRE_CMD=""
 # == ==
 
 runner_init_bench
@@ -23,10 +24,11 @@ function silo_tpcc {
     pushd $APP_DIR
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
-    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+    
+    $PRE_CMD taskset -c 0-$(echo "$THREADS - 1" | bc) \
         ./out-perf.masstree/benchmarks/dbtest \
         --verbose --bench tpcc \
-        --num-threads 32 \
+        --num-threads $THREADS \
         --scale-factor 20 \
         --retry-aborted-transactions \
         --ops-per-worker 10000000 \
@@ -39,7 +41,7 @@ function silo_ycsb {
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
 
-    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+    $PRE_CMD taskset -c 0-$(echo "$THREADS - 1" | bc) \
         ./out-perf.masstree/benchmarks/dbtest \
         --verbose --bench ycsb \
         --num-threads $THREADS \
@@ -58,7 +60,7 @@ function silo_ycsb_zipfian {
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
 
-    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+    $PRE_CMD taskset -c 0-$(echo "$THREADS - 1" | bc) \
         ./out-perf.masstree/benchmarks/dbtest \
         --verbose --bench ycsb \
         --num-threads $THREADS \
@@ -76,4 +78,8 @@ function silo_parser {
     local file=$RES_DIR/${BENCHMARK}${SUFFIX}.log
     local result=$(grep "agg_throughput" $file | awk '{print $2}')
     echo $result
+}
+
+function get_result_dir {
+    echo $RES_DIR/${BENCHMARK}${SUFFIX}.log
 }

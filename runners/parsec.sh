@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================
 BENCHMARK="parsec"
-THREADS=8
+THREADS=${THREADS:-20}
 # ============================
 
 # == Do not edit ==
@@ -28,8 +28,14 @@ function parsec_default_run {
     export PARSECPLAT=x86_64-linux.gcc
     export PARSECDIR=$APP_DIR
 
+    PROG_NAME=$1
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+
+    # === Check this ====
+    # Setting thread to 16 for splash benchmarks
+    THREADS=16
+    # ====================
 
     taskset -c 0-$((THREADS-1)) \
     parsecmgmt -a run -p $1 -i $2 -n $THREADS >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
@@ -45,6 +51,13 @@ function parsec_splash_run {
     export PARSECPLAT=x86_64-linux.gcc
     export PARSECDIR=$APP_DIR
 
+
+    # === Check this ====
+    # Setting thread to 16 for splash benchmarks
+    THREADS=16
+    # ====================
+
+    PROG_NAME=$1
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
     taskset -c 0-$((THREADS-1)) \

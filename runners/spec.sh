@@ -72,3 +72,7 @@ function get_bwaves_pid {
         return 1
     fi
 }
+
+function get_result_dir {
+    echo $RES_DIR/${BENCHMARK}${SUFFIX}.log
+}

@@ -5,7 +5,8 @@ function runner_log_basics {
     echo "Time: $(date)"
     echo "APP_DIR: $APP_DIR"
     echo "SCRIPT_DIR: $SCRIPT_DIR"   
-    echo "Benchmark: $BENCHMARK"
+    echo "Suite: $BENCHMARK"
+    echo "Benchmark: $PROG_NAME"
     echo "Threads: $THREADS"
 
     get_machine_details
@@ -38,8 +39,8 @@ function runner_init_bench {
 
 function runner_set_performance {
     echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-    echo 2600000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq
-    echo 2600000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
+    echo 3400000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq
+    echo 3400000 | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
 }
 
 function runner_restore_system_settings {

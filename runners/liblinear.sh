@@ -31,3 +31,7 @@ function liblinear_default {
 function liblinear_parser {
     grep "system" $RES_DIR/${BENCHMARK}${SUFFIX}.log | awk '{print $1}' | sed 's/elapsed//g'
 }
+
+function get_result_dir {
+    echo $RES_DIR/${BENCHMARK}${SUFFIX}.log
+}
