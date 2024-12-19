@@ -13,9 +13,8 @@ pushd $SETUP_DIR
 git clone https://github.com/sbeamer/gapbs .
 patch -p1 < $SCRIPT_DIR/../patches/gapbs.diff
 make;
-make pr; make pr gen-twitter
+make bench-graphs
 
 cd benchmark
 rm -rf raw
-
 popd
