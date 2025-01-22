@@ -51,6 +51,44 @@ function silo_ycsb {
     popd
 }
 
+# YCSB-e
+# This is a scan heavy workload
+# for YCSB
+function silo_ycsb_e {
+    pushd $APP_DIR
+    echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+
+    $PRE_CMD taskset -c 0-$(echo "$THREADS - 1" | bc) \
+        ./out-perf.masstree/benchmarks/dbtest \
+        --verbose --bench ycsb \
+        --num-threads $THREADS \
+        --runtime 60 \
+        --scale-factor 32000 \
+        --numa-memory 24G \
+        -o "-w 0,5,95,0" 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    popd
+}
+
+# YCSB-B
+# This is a read heavy workload
+function silo_ycsb_b {
+    pushd $APP_DIR
+    echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+
+    $PRE_CMD taskset -c 0-$(echo "$THREADS - 1" | bc) \
+        ./out-perf.masstree/benchmarks/dbtest \
+        --verbose --bench ycsb \
+        --num-threads $THREADS \
+        --runtime 60 \
+        --scale-factor 32000 \
+        --numa-memory 24G \
+        -o "-w 95,5,0,0" 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+    popd
+}
+
+
 # $1: zipfian constant
 # Values: 0.0, 0.1, 0.99, 1.5, -1
 # Default: 0.99

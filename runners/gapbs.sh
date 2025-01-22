@@ -36,6 +36,7 @@ function run_gapbs {
     local extra_args=$4
     running_program=$cmd
 
+
     pushd $APP_DIR
     echo "Starting $cmd with graph $graph..." > $RES_DIR/${BENCHMARK}_${cmd}_${log_suffix}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}_${cmd}_${log_suffix}.log
@@ -92,13 +93,6 @@ function gapbs_all {
     SUFFIX="urand" gapbs_sssp "urand.wsg"
     SUFFIX="road" gapbs_sssp "road.wsg"
     SUFFIX="web" gapbs_sssp "web.wsg"
-}
-
-
-# Return formatt
-# Average Time:        xxx.xx
-function gapbs_parser {
-    grep "Average Time" $RES_DIR/gapbs${SUFFIX}.log | awk '{print $3}'       
 }
 
 function get_result_dir {

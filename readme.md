@@ -17,19 +17,5 @@ bash gapbs.sh
 usage:
 ```bash
 cd runners
-source gapbs.sh && gapbs_default && gapbs_parser
+source gapbs.sh && gapbs_pr && gapbs_parser
 ```
-
-
-## Suite 1
-
-```
-cd install
-bash gapbs.sh && bash metis.sh && bash silo.sh
-```
-
-```
-
-```
-
-### Will it scale
