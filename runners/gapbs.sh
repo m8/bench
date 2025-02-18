@@ -95,6 +95,24 @@ function gapbs_all {
     SUFFIX="web" gapbs_sssp "web.wsg"
 }
 
+# $1: graph
+function gapbs_get_wss {
+   declare -A T_RSS_GAPBS=(
+        ["kron.sg"]=18
+        ["web.sg"]=16
+        ["twitter.sg"]=12
+        ["road.sg"]=2
+        ["urand.sg"]=18
+        ["kron.wsg"]=18
+        ["urand.wsg"]=18
+        ["road.wsg"]=2
+        ["web.wsg"]=16
+    )
+
+    local graph=${1}
+    echo ${T_RSS_GAPBS[$graph]}
+}
+
 function get_result_dir {
     echo $RES_DIR/gapbs_${running_program}_${SUFFIX}.log
 }

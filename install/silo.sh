@@ -12,7 +12,8 @@ mkdir -p $SETUP_DIR
 pushd $SETUP_DIR
 
 sudo apt-get install \
-    libdb++-dev
+    libdb++-dev \
+    libaio-dev 
 
 if [ -z "$(ls -A $SETUP_DIR)" ]; then
     git clone https://github.com/stephentu/silo .
