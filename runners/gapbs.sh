@@ -48,8 +48,24 @@ function run_gapbs {
     popd
 }
 
+function run_gapbs_kronecker {
+    local cmd=$1
+    local args=$2
+    local log_suffix=$3
+
+    pushd $APP_DIR
+    echo "Starting $cmd with args $args..." > $RES_DIR/${BENCHMARK}_${cmd}_${log_suffix}.log
+    runner_log_basics >> $RES_DIR/${BENCHMARK}_${cmd}_${log_suffix}.log
+
+    $PRE_CMD \
+    /usr/bin/time -v \
+    taskset -c 0-$(echo "$THREADS - 1" | bc) \
+    ./$cmd $args >> $RES_DIR/${BENCHMARK}_${cmd}_${log_suffix}.log 2>&1
+    popd
+}
+
 function gapbs_pr {
-    run_gapbs "pr" "${1:-"twitter.sg"}" "$SUFFIX" "-n 5 -i1000 -t1e-4"
+    run_gapbs "pr" "${1:-"twitter.sg"}" "$SUFFIX" "-n 100 -i1000 -t1e-4"
 }
 
 function gapbs_bc {

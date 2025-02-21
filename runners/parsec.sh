@@ -15,6 +15,7 @@ APP_DIR=$APP_DIR/${BENCHMARK}
 RES_DIR=$RES_DIR/${BENCHMARK}
 DATASET_DIR=$DATASET_DIR/${BENCHMARK}
 SUFFIX=""
+PRE_CMD=""
 # == ==
 
 runner_init_bench
@@ -37,6 +38,7 @@ function parsec_default_run {
     THREADS=16
     # ====================
 
+    $PRE_CMD \
     taskset -c 0-$((THREADS-1)) \
     parsecmgmt -a run -p $1 -i $2 -n $THREADS >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
 
@@ -60,6 +62,8 @@ function parsec_splash_run {
     PROG_NAME=$1
     echo "Starting benchmark..." > $RES_DIR/${BENCHMARK}${SUFFIX}.log
     runner_log_basics >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+
+    $PRE_CMD \
     taskset -c 0-$((THREADS-1)) \
     parsecmgmt -a run -p splash2x.$1 -i $2 -n $THREADS >> $RES_DIR/${BENCHMARK}${SUFFIX}.log
 

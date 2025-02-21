@@ -109,6 +109,17 @@ function silo_ycsb_zipfian {
     popd
 }
 
+function silo_get_wss {
+   declare -A T_RSS_SILO=(
+       ["tpcc"]="87"
+       ["ycsb"]="25"
+       ["ycsb_e"]="25"
+       ["ycsb_b"]="25"
+       ["ycsb_zipfian"]="25"
+   )
+    echo ${T_RSS_SILO[$1]}
+}
+
 
 # Return format
 # agg_throughput: xxx ops/sec

@@ -8,6 +8,10 @@ if [ "$#" -eq 1 ]; then
     SETUP_DIR=$1
 fi
 
+sudo apt-get install \
+    g++-9 \
+    libtiff-dev \
+
 mkdir -p $SETUP_DIR && pushd $SETUP_DIR
 git clone https://github.com/bamos/parsec-benchmark .
 patch -p1 < $SCRIPT_DIR/../patches/parsec.diff
