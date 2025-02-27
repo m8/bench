@@ -4,7 +4,7 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-SETUP_DIR=$SCRIPT_DIR/../app_dir/graph500
+SETUP_DIR=$SCRIPT_DIR/$APP_DIR/graph500
 
 if [ "$#" -eq 1 ]; then
     SETUP_DIR=$1

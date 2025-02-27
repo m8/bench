@@ -1,7 +1,6 @@
 #!/bin/bash
 # ---
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-APP_DIR=$SCRIPT_DIR/../app_dir/
 RES_DIR=$SCRIPT_DIR/../results/
 DATASET_DIR=$SCRIPT_DIR/../datasets/
 # ---

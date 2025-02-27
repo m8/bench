@@ -3,7 +3,7 @@ BENCH="multichase"
 
 # ==============
 export SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-SETUP_DIR="../app_dir/$BENCH"
+SETUP_DIR="$APP_DIR/$BENCH"
 
 if [ "$#" -eq 1 ]; then
     SETUP_DIR=$1

@@ -1,7 +1,7 @@
 #!/bin/bash
 export SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-SETUP_DIR="../app_dir/memcached"
+SETUP_DIR="$APP_DIR/memcached"
 
 sudo apt-get install memcached libmemcached-tools -y
 

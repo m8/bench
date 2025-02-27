@@ -1,7 +1,7 @@
 #!/bin/bash
 export SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-SETUP_DIR="../app_dir/liblinear"
+SETUP_DIR="$APP_DIR/liblinear"
 DATASET_DIR="/scratch/musa/datasets/liblinear"
 
 if [ "$#" -eq 1 ]; then

@@ -6,12 +6,11 @@ THREADS=${THREADS:-20}
 
 # == Do not edit ==
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-APP_DIR=$SCRIPT_DIR/../app_dir/
 RES_DIR=$SCRIPT_DIR/../results/
 DATASET_DIR=$SCRIPT_DIR/../datasets/
 source $SCRIPT_DIR/_runner.sh
 
-APP_DIR=$APP_DIR/${BENCHMARK}
+APP_DIR=${APP_DIR}/${BENCHMARK}
 RES_DIR=$RES_DIR/${BENCHMARK}
 DATASET_DIR=$DATASET_DIR/${BENCHMARK}
 SUFFIX=""
@@ -48,6 +47,21 @@ function run_gapbs {
     popd
 }
 
+# This function just returns the command to be run
+function run_gapbs_cmd {
+    local cmd=$1
+    local graph=$2
+    local log_suffix=$3
+    local extra_args=$4
+    running_program=$cmd
+
+    cmd="$PRE_CMD \
+    $APP_DIR/$cmd -f $APP_DIR/benchmark/graphs/$graph $extra_args"
+
+    echo $cmd
+}
+
+
 function run_gapbs_kronecker {
     local cmd=$1
     local args=$2
@@ -65,19 +79,27 @@ function run_gapbs_kronecker {
 }
 
 function gapbs_pr {
-    run_gapbs "pr" "${1:-"twitter.sg"}" "$SUFFIX" "-n 100 -i1000 -t1e-4"
+    local runner_fn=run_gapbs
+    [[ -n "$GET_CMD" ]] && runner_fn=run_gapbs_cmd
+    $runner_fn "pr" "${1:-"twitter.sg"}" "$SUFFIX" "-n 10 -i1000 -t1e-4"
 }
 
 function gapbs_bc {
-    run_gapbs "bc" "${1:-"twitter.sg"}" "$SUFFIX" "-i4 -n16"
+    local runner_fn=run_gapbs
+    [[ -n "$GET_CMD" ]] && runner_fn=run_gapbs_cmd
+    $runner_fn "bc" "${1:-"twitter.sg"}" "$SUFFIX" "-i4 -n16"
 }
 
 function gapbs_bfs {
-    run_gapbs "bfs" "${1:-"twitter.sg"}" "$SUFFIX" "-n64"
+    local runner_fn=run_gapbs
+    [[ -n "$GET_CMD" ]] && runner_fn=run_gapbs_cmd
+    $runner_fn "bfs" "${1:-"twitter.sg"}" "$SUFFIX" "-n64"
 }
 
 function gapbs_cc {
-    run_gapbs "cc" "${1:-"twitter.sg"}" "$SUFFIX" "-n16"
+    local runner_fn=run_gapbs
+    [[ -n "$GET_CMD" ]] && runner_fn=run_gapbs_cmd
+    $runner_fn "cc" "${1:-"twitter.sg"}" "$SUFFIX" "-n16"
 }
 
 function gapbs_sssp {

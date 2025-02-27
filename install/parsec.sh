@@ -2,7 +2,7 @@
 
 export SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-SETUP_DIR="../app_dir/parsec"
+SETUP_DIR="$APP_DIR/parsec"
 
 if [ "$#" -eq 1 ]; then
     SETUP_DIR=$1

@@ -3,7 +3,7 @@
 function runner_log_basics {
     echo "++++++++++++++++++++"
     echo "Time: $(date)"
-    echo "APP_DIR: $APP_DIR"
+    echo "$APP_DIR: $APP_DIR"
     echo "SCRIPT_DIR: $SCRIPT_DIR"   
     echo "Suite: $BENCHMARK"
     echo "Benchmark: $PROG_NAME"

@@ -6,9 +6,9 @@ THREADS=8
 
 # == Do not edit ==
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-APP_DIR=$SCRIPT_DIR/../app_dir/
+
 RES_DIR=$SCRIPT_DIR/../results/
-DATASET_DIR=$SCRIPT_DIR/../datasets/
+DATASET_DIR=$APP_DIR/datasets/phoenix
 source $SCRIPT_DIR/_runner.sh
 
 APP_DIR=$APP_DIR/${BENCHMARK}
@@ -27,6 +27,12 @@ function run_benchmark {
     local size=$2
 
     command="export MR_NUMPROCS=$THREADS MR_NUMTHREADS=$THREADS; LD_PRELOAD=/usr/local/lib/libjemalloc.so $APP_DIR/tests/$benchmark/$benchmark $DATASET_DIR/${benchmark}_datafiles/$size"
+    echo $command
+    { time eval $command >> $RES_DIR/${BENCHMARK}${SUFFIX}.log; } 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
+}
+
+function run_kmeans {
+    command="export MR_NUMPROCS=$THREADS MR_NUMTHREADS=$THREADS; LD_PRELOAD=/usr/local/lib/libjemalloc.so $APP_DIR/tests/kmeans/kmeans -d 8 -c 8192 -p 5000000 -s 40"
     echo $command
     { time eval $command >> $RES_DIR/${BENCHMARK}${SUFFIX}.log; } 2>> $RES_DIR/${BENCHMARK}${SUFFIX}.log
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 export SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-SETUP_DIR="../app_dir/gupbs"
+SETUP_DIR="$APP_DIR/gupbs"
 
 sudo apt install libopenmpi-dev
 

@@ -1,8 +1,13 @@
 #!/bin/bash
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-SETUP_DIR=$SCRIPT_DIR/../app_dir/phoenix
-DATASET_DIR=$SCRIPT_DIR/../datasets/phoenix
+if [ -z "${APP_DIR}" ]; then
+    echo "set APP_DIR"
+    return 1
+fi
+
+SETUP_DIR=$APP_DIR/phoenix
+DATASET_DIR=$APP_DIR/datasets/phoenix
 
 if [ "$#" -eq 1 ]; then
     SETUP_DIR=$1
@@ -17,12 +22,15 @@ mkdir -p $DATASET_DIR
 # Note: This benchmark only uses phoenix-2.0.
 # ===========
 
-pushd $SETUP_DIR
-git clone https://github.com/kozyraki/phoenix
-mv phoenix/phoenix-2.0/* .
-rm -rf phoenix
-make
-popd
+# pushd $SETUP_DIR
+# git clone https://github.com/kozyraki/phoenix
+# cd phoenix
+# patch -p1 < $SCRIPT_DIR/../patches/phoenix.diff
+# cd ..
+# mv phoenix/phoenix-2.0/* .
+# rm -rf phoenix
+# make
+# popd
 
 
 # ===========
