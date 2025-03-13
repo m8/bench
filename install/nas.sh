@@ -14,8 +14,11 @@ pushd NPB/NPB3.4-OMP
 cp config/suite.def.template config/suite.def
 cp config/make.def.template config/make.def
 
-make ft CLASS=W
-make ft CLASS=A
-make ft CLASS=D
+# make ft CLASS=W
+# make ft CLASS=A
+benhcmarks="ft bt lu cg mg sp"
+for bm in $benhcmarks; do
+    make $bm CLASS=E -j
+done
 
 popd
