@@ -30,6 +30,17 @@ function get_machine_details {
     echo "Numa hardware: $(numactl --hardware)"
     echo "Prefetcher at core 0:" $(sudo rdmsr 0x1a4)
     echo ""
+    get_sysctl_all
+    echo ""
+}
+
+function get_sysctl_all
+{
+    echo "----------------"
+    echo "Sysctl settings:"
+    echo "----------------"
+    sysctl -a | grep -v "net\."
+    echo ""    
 }
 
 function runner_init_bench {
