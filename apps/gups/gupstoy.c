@@ -79,12 +79,11 @@ HPCC_starts(int64_t n)
 #define CONFIG_SHM_FILE_NAME "/tmp/alloctest-bench"
 
 
-int real_main(int argc, char *argv[]);
-int real_main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     size_t mem = (1UL << 30);
 
-    fprintf(opt_file_out, "<gups tablesize=\"%zu\"></gups>\n", mem);
+    printf("<gups tablesize=\"%zu\"></gups>\n", mem);
 
     struct timespec time1, time2;
 
@@ -99,13 +98,13 @@ int real_main(int argc, char *argv[])
 
     //uint64_t *Table = malloc(mem);
     if (!Table) {
-        fprintf(opt_file_out, "ERROR: Could not allocate table!\n");
+        printf("ERROR: Could not allocate table!\n");
         return -1;
     }
 
     size_t TableSize = mem / sizeof(uint64_t);
 
-    fprintf(opt_file_out, "<gups table=\"%p\" tablesize=\"%zu\"></gups>\n", Table, TableSize);
+    printf("<gups table=\"%p\" tablesize=\"%zu\"></gups>\n", Table, TableSize);
 
 
     /* Initialize main table */
@@ -116,28 +115,22 @@ int real_main(int argc, char *argv[])
         Table[i] = i;
     }
 
-    FILE *fd2 = fopen(CONFIG_SHM_FILE_NAME ".ready", "w");
-
-    if (fd2 == NULL) {
-        fprintf (stderr, "ERROR: could not create the shared memory file descriptor\n");
-        exit(-1);
-    }
-
     usleep(250);
 
 
+    clock_gettime(CLOCK_MONOTONIC, &time1);
     #ifdef _OPENMP
     #pragma omp parallel
     {
     #endif
         /* Current random numbers */
         uint64_t *ran = calloc(128, sizeof(uint64_t));
-        printf("====  %p\n", ran);
+        // printf("====  %p\n", ran);
         for (size_t j=0; j<128; j++) {
             ran[j] = HPCC_starts ((NUPDATE/128) * j);
         }
 
-        printf("====\n");
+        // printf("====\n");
 
         #ifdef _OPENMP
         size_t num_threads = omp_get_num_threads();
@@ -159,9 +152,14 @@ int real_main(int argc, char *argv[])
     #ifdef _OPENMP
     } // opened in prepare_parallel_for
     #endif
+    clock_gettime(CLOCK_MONOTONIC, &time2);
+    double elapsed = (time2.tv_sec - time1.tv_sec) +
+        (time2.tv_nsec - time1.tv_nsec) / 1e9;
+    printf("Elapsed time: %f seconds\n", elapsed);
+    printf("Update cnt: %zu\n", NUPDATE);
+    printf("GUPS: %f GUPS\n", (double)NUPDATE / elapsed / 1e9);
 
-//  Don't free the table in the end, so we can check the page table
-//    free(Table);
+    free(Table);
 
     return 0;
 }

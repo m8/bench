@@ -1,4 +1,4 @@
-! CLASS = W
+! CLASS = D
 !  
 !  
 !  This file is generated automatically by the setparams utility.
@@ -6,13 +6,13 @@
 !  in this directory. Do not modify it by hand.
 !  
         integer nx_default, ny_default, nz_default
-        parameter (nx_default=128, ny_default=128, nz_default=128)
+        parameter (nx_default=1024, ny_default=1024, nz_default=1024)
         integer nit_default, lm, lt_default
-        parameter (nit_default=4, lm = 7, lt_default=7)
+        parameter (nit_default=50, lm = 10, lt_default=10)
         integer debug_default
         parameter (debug_default=0)
         integer ndim1, ndim2, ndim3
-        parameter (ndim1 = 7, ndim2 = 7, ndim3 = 7)
+        parameter (ndim1 = 10, ndim2 = 10, ndim3 = 10)
         integer kind2
         parameter (kind2=4)
         logical  convertdouble

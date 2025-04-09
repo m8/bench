@@ -1,4 +1,4 @@
-#define CLASS 'W'
+#define CLASS 'D'
 /*
    This file is generated automatically by the setparams utility.
    It sets the number of processors and the class of the NPB

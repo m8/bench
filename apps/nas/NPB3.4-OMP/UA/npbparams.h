@@ -1,4 +1,4 @@
-! CLASS = W
+! CLASS = D
 !  
 !  
 !  This file is generated automatically by the setparams utility.
@@ -9,14 +9,14 @@
         integer          niter_default, nmxh_default
         character        class_default
         double precision alpha_default
-        parameter(  lelt=700, &
-     &             lmor=26700, &
-     &              refine_max=5, &
+        parameter(  lelt=514400, &
+     &             lmor=19134400, &
+     &              refine_max=10, &
      &              fre_default=5, &
-     &              niter_default=100, &
+     &              niter_default=250, &
      &              nmxh_default=10, &
-     &              class_default="W", &
-     &              alpha_default=0.060d0 )
+     &              class_default="D", &
+     &              alpha_default=0.046d0 )
         logical  convertdouble
         parameter (convertdouble = .false.)
         character compiletime*11

@@ -1,4 +1,4 @@
-! CLASS = W
+! CLASS = D
 !  
 !  
 !  This file is generated automatically by the setparams utility.
@@ -6,9 +6,9 @@
 !  in this directory. Do not modify it by hand.
 !  
         integer problem_size, niter_default
-        parameter (problem_size=24, niter_default=200)
+        parameter (problem_size=408, niter_default=250)
         double precision dt_default
-        parameter (dt_default = 0.0008d0)
+        parameter (dt_default = 0.00002d0)
         logical  convertdouble
         parameter (convertdouble = .false.)
         character compiletime*11
