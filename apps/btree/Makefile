@@ -1,4 +1,4 @@
-program = BTree
+program = btree
 source = btree.c
 obj = $(source:.c=.o)
 objomp = $(source:.c=.o-omp)
@@ -11,7 +11,7 @@ CC = gcc
 
 $(program): $(obj) $(objomp) Makefile
 	$(CC) $(CFLAGS) $(obj) -o $@ $(LDFLAGS)
-	$(CC) $(CFLAGS) $(objomp) -o $@-omp $(LDFLAGS) -fopenmp
+	$(CC) $(CFLAGS) $(objomp) -o $@_omp $(LDFLAGS) -fopenmp
 
 libbtree.a: $(obj) Makefile
 	ar rcs $@ $(obj)
@@ -26,6 +26,6 @@ libbtreeomp.a: $(objomp) Makefile
 	$(CC) $(CFLAGS) -fopenmp -c $< -o $@
 
 clean:
-	rm -rf $(program) $(program)-omp $(obj)
+	rm -rf $(program) $(program)-omp $(obj) BTree BTree-omp
 	rm -f *.a
 	rm -f *.o-omp

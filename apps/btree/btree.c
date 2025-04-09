@@ -61,9 +61,11 @@
 #ifdef _OPENMP
 ///< the number of elements in the tree
 //#define NELEMENTS (8UL << 30)
-#define NELEMENTS   (3400UL << 20)
+// #define NELEMENTS   (3400UL << 20)
+#define NELEMENTS   (100UL << 20)
 ///< the number of lookups
-#define NLOOKUP 2000000000UL
+// #define NLOOKUP 2000000000UL
+#define NLOOKUP 100000000UL
 #else
 ///< the number of elements in the tree
 #define NELEMENTS (3400UL << 20)
@@ -1563,20 +1565,6 @@ int main(int argc, char ** argv) {
 		root = insert(root, i, (uint64_t)&elms[i/2]);
 		root = insert(root, NELEMENTS - i - 1, (uint64_t)&elms2[i/2]);
 	}
-
-
-	printf( "signalling readyness to %s\n",
-			CONFIG_SHM_FILE_NAME ".ready");
-	FILE *fd2 = fopen(CONFIG_SHM_FILE_NAME ".ready", "w");
-
-	if (fd2 == NULL) {
-		printf(
-				"ERROR: could not create the shared memory file descriptor\n");
-		exit(-1);
-	}
-
-	usleep(250);
-
 
 	uint64_t sum = 0;
 
