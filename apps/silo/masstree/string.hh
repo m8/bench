@@ -16,7 +16,6 @@
 #ifndef LCDF_STRING_HH
 #define LCDF_STRING_HH
 #include "string_base.hh"
-#include <atomic>
 #include <string>
 #include <utility>
 namespace lcdf {
@@ -33,7 +32,9 @@ class String : public String_base<String> {
 
     inline String();
     inline String(const String &x);
+#if HAVE_CXX_RVALUE_REFERENCES
     inline String(String &&x);
+#endif
     template <typename T>
     explicit inline String(const String_base<T>& str);
     inline String(const char* cstr);
@@ -116,18 +117,19 @@ class String : public String_base<String> {
     using String_base<String>::decode_base64;
     String decode_base64() const;
 
-    using String_base<String>::encode_uri_component;
-    String encode_uri_component() const;
-
     inline String& operator=(const String& x);
+#if HAVE_CXX_RVALUE_REFERENCES
     inline String& operator=(String&& x);
+#endif
     template <typename T>
     inline String& operator=(const String_base<T>& str);
     inline String& operator=(const char* cstr);
     inline String& operator=(const std::string& str);
 
     inline void assign(const String& x);
+#if HAVE_CXX_RVALUE_REFERENCES
     inline void assign(String&& x);
+#endif
     template <typename T>
     inline void assign(const String_base<T>& str);
     inline void assign(const char* cstr);
@@ -181,10 +183,10 @@ class String : public String_base<String> {
 
         inline void ref() const {
             if (memo_offset)
-                xmemo()->incref();
+                ++xmemo()->refcount;
         }
         inline void deref() const {
-            if (memo_offset && xmemo()->decref())
+            if (memo_offset && --xmemo()->refcount == 0)
                 String::delete_memo(xmemo());
         }
         inline void reset_ref() {
@@ -203,7 +205,7 @@ class String : public String_base<String> {
             data = d;
             length = l;
             if (m) {
-                m->incref();
+                ++m->refcount;
                 memo_offset = static_cast<int>(reinterpret_cast<char*>(m) - d);
             } else
                 memo_offset = 0;
@@ -233,9 +235,9 @@ class String : public String_base<String> {
   private:
     /** @cond never */
     struct memo_type {
-        relaxed_atomic<uint32_t> refcount;
+        volatile uint32_t refcount;
         uint32_t capacity;
-        relaxed_atomic<uint32_t> dirty;
+        volatile uint32_t dirty;
 #if HAVE_STRING_PROFILING > 1
         memo_type** pprev;
         memo_type* next;
@@ -249,19 +251,6 @@ class String : public String_base<String> {
 #else
         inline void account_destroy() {}
 #endif
-
-        inline void incref() {
-            uint32_t ref = refcount.load() + 1;
-            refcount.store(ref);
-        }
-        inline bool decref() {
-            uint32_t ref = refcount.load() - 1;
-            refcount.store(ref);
-            return ref == 0;
-        }
-        inline bool refunique() const {
-            return refcount.load() == 1;
-        }
     };
 
     enum {
@@ -355,9 +344,9 @@ class String : public String_base<String> {
 
 /** @cond never */
 inline void String::memo_type::initialize(uint32_t capacity, uint32_t dirty) {
-    this->refcount.store(1);
+    this->refcount = 1;
     this->capacity = capacity;
-    this->dirty.store(dirty);
+    this->dirty = dirty;
 #if HAVE_STRING_PROFILING
     this->account_new();
 #endif
@@ -375,11 +364,13 @@ inline String::String(const String& x)
     _r.ref();
 }
 
+#if HAVE_CXX_RVALUE_REFERENCES
 /** @brief Move-construct a String from @a x. */
 inline String::String(String &&x)
     : _r(x._r) {
     x._r.reset_ref();
 }
+#endif
 
 /** @brief Construct a copy of the string @a str. */
 template <typename T>
@@ -392,11 +383,10 @@ inline String::String(const String_base<T> &str) {
     @return A String containing the characters of @a cstr, up to but not
     including the terminating null character. */
 inline String::String(const char* cstr) {
-    if (LCDF_CONSTANT_CSTR(cstr)) {
+    if (LCDF_CONSTANT_CSTR(cstr))
         _r.assign(cstr, strlen(cstr), 0);
-    } else {
+    else
         assign(cstr, -1, false);
-    }
 }
 
 /** @brief Construct a String containing the first @a len characters of
@@ -406,18 +396,12 @@ inline String::String(const char* cstr) {
     then takes @c strlen(@a s) characters.
     @return A String containing @a len characters of @a s. */
 inline String::String(const char* s, int len) {
-    if (LCDF_CONSTANT_CSTR(s))
-        _r.assign(s, len, 0);
-    else
-        assign(s, len, false);
+    assign(s, len, false);
 }
 
 /** @overload */
 inline String::String(const unsigned char* s, int len) {
-    if (LCDF_CONSTANT_CSTR(reinterpret_cast<const char*>(s)))
-        _r.assign(reinterpret_cast<const char*>(s), len, 0);
-    else
-        assign(reinterpret_cast<const char*>(s), len, false);
+    assign(reinterpret_cast<const char*>(s), len, false);
 }
 
 /** @brief Construct a String containing the characters from @a first
@@ -568,7 +552,7 @@ inline const char* String::c_str() const {
     // exists. Otherwise must check that _data[_length] exists.
     const char* end_data = _r.data + _r.length;
     memo_type* m = _r.memo();
-    if ((m && end_data >= m->real_data + m->dirty.load())
+    if ((m && end_data >= m->real_data + m->dirty)
         || *end_data != '\0') {
         if (char *x = const_cast<String*>(this)->append_uninitialized(1)) {
             *x = '\0';
@@ -650,6 +634,7 @@ inline String& String::operator=(const String& x) {
     return *this;
 }
 
+#if HAVE_CXX_RVALUE_REFERENCES
 /** @brief Move-assign this string to @a x. */
 inline void String::assign(String&& x) {
     deref();
@@ -662,6 +647,7 @@ inline String& String::operator=(String&& x) {
     assign(std::move(x));
     return *this;
 }
+#endif
 
 /** @brief Assign this string to the C string @a cstr. */
 inline void String::assign(const char* cstr) {
@@ -782,7 +768,7 @@ inline String &String::operator+=(const String_base<T> &x) {
 /** @brief Test if the String's data is shared or stable. */
 inline bool String::is_shared() const {
     memo_type* m = _r.memo();
-    return !m || m->refunique();
+    return !m || m->refcount != 1;
 }
 
 /** @brief Test if the String's data is stable. */
@@ -795,7 +781,7 @@ inline bool String::is_stable() const {
     The return value shares no data with any other non-stable String. */
 inline String String::unique() const {
     memo_type* m = _r.memo();
-    if (!m || m->refunique())
+    if (!m || m->refcount == 1)
         return *this;
     else
         return String(_r.data, _r.data + _r.length);
@@ -807,7 +793,7 @@ inline String String::unique() const {
     of data with any other non-stable String. */
 inline void String::shrink_to_fit() {
     memo_type* m = _r.memo();
-    if (m && !m->refunique() && (uint32_t) _r.length + 256 < m->capacity)
+    if (m && m->refcount > 1 && (uint32_t) _r.length + 256 < m->capacity)
         *this = String(_r.data, _r.data + _r.length);
 }
 

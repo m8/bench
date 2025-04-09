@@ -16,6 +16,7 @@
 #include "file.hh"
 #include "straccum.hh"
 #include <fcntl.h>
+#include <stdio.h>
 
 lcdf::String read_file_contents(int fd) {
     lcdf::StringAccum sa;
@@ -50,8 +51,7 @@ lcdf::String read_file_contents(const char *filename) {
         int saved_errno = errno;
         close(fd);
         errno = saved_errno;
-    } else
-        close(fd);
+    }
     return text;
 }
 
@@ -65,16 +65,19 @@ int sync_write_file_contents(const char *filename, const lcdf::String &contents,
     ssize_t x = safe_write(fd, contents.data(), contents.length());
     if (x != contents.length()) {
     error:
-        int saved_errno = errno;
         close(fd);
-        errno = saved_errno;
         return -1;
     }
 
-    if (fsync(fd) != 0)
+    int r = fsync(fd);
+    if (r != 0)
         goto error;
 
-    return close(fd);
+    r = close(fd);
+    if (r != 0)
+        goto error;
+
+    return 0;
 }
 
 int atomic_write_file_contents(const char *filename, const lcdf::String &contents,

@@ -250,7 +250,7 @@ ifneq ($(DEPFILES),)
 endif
 
 ifeq ($(wildcard masstree/GNUmakefile.in),)
-INSTALL_MASSTREE := $(shell git submodule init; git submodule update)
+# INSTALL_MASSTREE := $(shell git submodule init; git submodule update)
 endif
 
 ifeq ($(MASSTREE_S),1)

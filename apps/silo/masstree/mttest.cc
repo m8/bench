@@ -73,6 +73,8 @@
 static std::vector<int> cores;
 volatile bool timeout[2] = {false, false};
 double duration[2] = {10, 0};
+// Do not start timer until asked
+static bool lazy_timer = false;
 int kvtest_first_seed = 31949;
 uint64_t test_limit = ~uint64_t(0);
 static Json test_param;
@@ -87,11 +89,8 @@ static int tcpthreads = 0;
 
 static bool tree_stats = false;
 static bool json_stats = false;
-static String gnuplot_yrange;
 static bool pinthreads = false;
-static nodeversion32 global_epoch_lock(false);
-relaxed_atomic<mrcu_epoch_type> globalepoch(1);     // global epoch, updated by main thread regularly
-relaxed_atomic<mrcu_epoch_type> active_epoch(1);
+volatile uint64_t globalepoch = 1;     // global epoch, updated by main thread regularly
 kvepoch_t global_log_epoch = 0;
 static int port = 2117;
 static int rscale_ncores = 0;
@@ -121,19 +120,8 @@ void test_timeout(int) {
     }
 }
 
-void set_global_epoch(mrcu_epoch_type e) {
-    global_epoch_lock.lock();
-    if (mrcu_signed_epoch_type(e - globalepoch.load()) > 0) {
-        globalepoch.store(e);
-        active_epoch.store(threadinfo::min_active_epoch());
-    }
-    global_epoch_lock.unlock();
-}
-
 template <typename T>
 struct kvtest_client {
-    using table_type = T;
-
     kvtest_client()
         : limit_(test_limit), ncores_(udpthreads), kvo_() {
     }
@@ -148,7 +136,7 @@ struct kvtest_client {
     int id() const {
         return ti_->index();
     }
-    void set_table(T* table, threadinfo *ti) {
+    void set_table(T *table, threadinfo *ti) {
         table_ = table;
         ti_ = ti;
     }
@@ -157,6 +145,11 @@ struct kvtest_client {
             .set("test", test).set("trial", trial)
             .set("thread", ti_->index());
     }
+    static void start_timer() {
+        always_assert(lazy_timer && "Cannot start timer without lazy_timer option");
+        always_assert(duration[0] && "Must specify timeout[0]");
+        xalarm(duration[0]);
+    }
 
     bool timeout(int which) const {
         return ::timeout[which];
@@ -164,11 +157,8 @@ struct kvtest_client {
     uint64_t limit() const {
         return limit_;
     }
-    bool has_param(const String& name) const {
-        return test_param.count(name);
-    }
-    Json param(const String& name, Json default_value = Json()) const {
-        return test_param.count(name) ? test_param.at(name) : default_value;
+    Json param(const String& name) const {
+        return test_param[name];
     }
 
     int ncores() const {
@@ -188,8 +178,8 @@ struct kvtest_client {
     }
 
     void get(long ikey);
-    bool get_sync(Str key);
-    bool get_sync(Str key, Str& value);
+    bool get_sync(const Str &key);
+    bool get_sync(const Str &key, Str &value);
     bool get_sync(long ikey) {
         quick_istr key(ikey);
         return get_sync(key.string());
@@ -198,7 +188,7 @@ struct kvtest_client {
         quick_istr key(ikey, 16);
         return get_sync(key.string());
     }
-    void get_check(Str key, Str expected);
+    void get_check(const Str &key, const Str &expected);
     void get_check(const char *key, const char *expected) {
         get_check(Str(key), Str(expected));
     }
@@ -206,7 +196,7 @@ struct kvtest_client {
         quick_istr key(ikey), expected(iexpected);
         get_check(key.string(), expected.string());
     }
-    void get_check(Str key, long iexpected) {
+    void get_check(const Str &key, long iexpected) {
         quick_istr expected(iexpected);
         get_check(key, expected.string());
     }
@@ -214,7 +204,7 @@ struct kvtest_client {
         quick_istr key(ikey, 8), expected(iexpected);
         get_check(key.string(), expected.string());
     }
-    void get_col_check(Str key, int col, Str value);
+    void get_col_check(const Str &key, int col, const Str &value);
     void get_col_check(long ikey, int col, long ivalue) {
         quick_istr key(ikey), value(ivalue);
         get_col_check(key.string(), col, value.string());
@@ -223,20 +213,14 @@ struct kvtest_client {
         quick_istr key(ikey, 10), value(ivalue);
         get_col_check(key.string(), col, value.string());
     }
-    void get_check_absent(Str key);
     //void many_get_check(int nk, long ikey[], long iexpected[]);
 
-    void scan_sync(Str firstkey, int n,
-                   std::vector<Str>& keys, std::vector<Str>& values);
-    void rscan_sync(Str firstkey, int n,
-                    std::vector<Str>& keys, std::vector<Str>& values);
-    void scan_versions_sync(Str firstkey, int n,
-                            std::vector<Str>& keys, std::vector<Str>& values);
-    const std::vector<uint64_t>& scan_versions() const {
-        return scan_versions_;
-    }
+    void scan_sync(const Str &firstkey, int n,
+                   std::vector<Str> &keys, std::vector<Str> &values);
+    void rscan_sync(const Str &firstkey, int n,
+                    std::vector<Str> &keys, std::vector<Str> &values);
 
-    void put(Str key, Str value);
+    void put(const Str &key, const Str &value);
     void put(const char *key, const char *value) {
         put(Str(key), Str(value));
     }
@@ -244,7 +228,7 @@ struct kvtest_client {
         quick_istr key(ikey), value(ivalue);
         put(key.string(), value.string());
     }
-    void put(Str key, long ivalue) {
+    void put(const Str &key, long ivalue) {
         quick_istr value(ivalue);
         put(key, value.string());
     }
@@ -256,7 +240,7 @@ struct kvtest_client {
         quick_istr key(ikey, 16), value(ivalue);
         put(key.string(), value.string());
     }
-    void put_col(Str key, int col, Str value);
+    void put_col(const Str &key, int col, const Str &value);
     void put_col(long ikey, int col, long ivalue) {
         quick_istr key(ikey), value(ivalue);
         put_col(key.string(), col, value.string());
@@ -265,9 +249,8 @@ struct kvtest_client {
         quick_istr key(ikey, 10), value(ivalue);
         put_col(key.string(), col, value.string());
     }
-    void insert_check(Str key, Str value);
 
-    void remove(Str key);
+    void remove(const Str &key);
     void remove(long ikey) {
         quick_istr key(ikey);
         remove(key.string());
@@ -280,24 +263,20 @@ struct kvtest_client {
         quick_istr key(ikey, 16);
         remove(key.string());
     }
-    bool remove_sync(Str key);
+    bool remove_sync(const Str &key);
     bool remove_sync(long ikey) {
         quick_istr key(ikey);
         return remove_sync(key.string());
     }
-    void remove_check(Str key);
 
-    void print() {
-        table_->print(stderr);
-    }
     void puts_done() {
     }
     void wait_all() {
     }
     void rcu_quiesce() {
-        mrcu_epoch_type e = timestamp() >> 16;
-        if (e != globalepoch.load())
-            set_global_epoch(e);
+        uint64_t e = timestamp() >> 16;
+        if (e != globalepoch)
+            globalepoch = e;
         ti_->rcu_quiesce();
     }
     String make_message(lcdf::StringAccum &sa) const;
@@ -308,16 +287,13 @@ struct kvtest_client {
     }
     void finish() {
         Json counters;
-        for (int i = 0; i < tc_max; ++i) {
+        for (int i = 0; i < tc_max; ++i)
             if (uint64_t c = ti_->counter(threadcounter(i)))
                 counters.set(threadcounter_names[i], c);
-        }
-        if (counters) {
+        if (counters)
             report_.set("counters", counters);
-        }
-        if (!quiet) {
+        if (!quiet)
             fprintf(stderr, "%d: %s\n", ti_->index(), report_.unparse().c_str());
-        }
     }
 
     T *table_;
@@ -326,8 +302,6 @@ struct kvtest_client {
     kvrandom_lcg_nr rand;
     uint64_t limit_;
     Json report_;
-    Json req_;
-    std::vector<uint64_t> scan_versions_;
     int ncores_;
     kvout *kvo_;
 
@@ -337,11 +311,11 @@ struct kvtest_client {
 
 static volatile int kvtest_printing;
 
-template <typename T> inline void kvtest_print(const T &table, FILE* f, threadinfo *ti) {
+template <typename T> inline void kvtest_print(const T &table, FILE *f, int indent, threadinfo *ti) {
     // only print out the tree from the first failure
-    while (!bool_cmpxchg((int *) &kvtest_printing, 0, ti->index() + 1)) {
-    }
-    table.print(f);
+    while (!bool_cmpxchg((int *) &kvtest_printing, 0, ti->index() + 1))
+        /* spin */;
+    table.print(f, indent);
 }
 
 template <typename T> inline void kvtest_json_stats(T& table, Json& j, threadinfo& ti) {
@@ -356,50 +330,39 @@ void kvtest_client<T>::get(long ikey) {
 }
 
 template <typename T>
-bool kvtest_client<T>::get_sync(Str key) {
+bool kvtest_client<T>::get_sync(const Str& key) {
     Str val;
     return q_[0].run_get1(table_->table(), key, 0, val, *ti_);
 }
 
 template <typename T>
-bool kvtest_client<T>::get_sync(Str key, Str& value) {
+bool kvtest_client<T>::get_sync(const Str &key, Str &value) {
     return q_[0].run_get1(table_->table(), key, 0, value, *ti_);
 }
 
 template <typename T>
-void kvtest_client<T>::get_check(Str key, Str expected) {
+void kvtest_client<T>::get_check(const Str &key, const Str &expected) {
     Str val;
-    if (unlikely(!q_[0].run_get1(table_->table(), key, 0, val, *ti_))) {
-        fail("get(%s) failed (expected %s)\n", String(key).printable().c_str(),
-             String(expected).printable().c_str());
-    } else if (unlikely(expected != val)) {
-        fail("get(%s) returned unexpected value %s (expected %s)\n",
-             String(key).printable().c_str(),
-             String(val).substr(0, 40).printable().c_str(),
-             String(expected).substr(0, 40).printable().c_str());
-    }
+    if (!q_[0].run_get1(table_->table(), key, 0, val, *ti_))
+        fail("get(%.*s) failed (expected %.*s)\n", key.len, key.s,
+             expected.len, expected.s);
+    else if (expected != val)
+        fail("get(%.*s) returned unexpected value %.*s (expected %.*s)\n",
+             key.len, key.s, std::min(val.len, 40), val.s,
+             expected.len, expected.s);
 }
 
 template <typename T>
-void kvtest_client<T>::get_col_check(Str key, int col,
-                                     Str expected) {
+void kvtest_client<T>::get_col_check(const Str &key, int col,
+                                     const Str &expected) {
     Str val;
-    if (unlikely(!q_[0].run_get1(table_->table(), key, col, val, *ti_))) {
+    if (!q_[0].run_get1(table_->table(), key, col, val, *ti_))
         fail("get.%d(%.*s) failed (expected %.*s)\n",
              col, key.len, key.s, expected.len, expected.s);
-    } else if (unlikely(expected != val)) {
+    else if (expected != val)
         fail("get.%d(%.*s) returned unexpected value %.*s (expected %.*s)\n",
              col, key.len, key.s, std::min(val.len, 40), val.s,
              expected.len, expected.s);
-    }
-}
-
-template <typename T>
-void kvtest_client<T>::get_check_absent(Str key) {
-    Str val;
-    if (unlikely(q_[0].run_get1(table_->table(), key, 0, val, *ti_))) {
-        fail("get(%s) failed (expected absent key)\n", String(key).printable().c_str());
-    }
 }
 
 /*template <typename T>
@@ -422,31 +385,21 @@ void kvtest_client<T>::many_get_check(int nk, long ikey[], long iexpected[]) {
 }*/
 
 template <typename T>
-void kvtest_client<T>::scan_sync(Str firstkey, int n,
-                                 std::vector<Str>& keys,
-                                 std::vector<Str>& values) {
-    req_ = Json::array(0, 0, firstkey, n);
-    q_[0].run_scan(table_->table(), req_, *ti_);
-    output_scan(req_, keys, values);
+void kvtest_client<T>::scan_sync(const Str &firstkey, int n,
+                                 std::vector<Str> &keys,
+                                 std::vector<Str> &values) {
+    Json req = Json::array(0, 0, firstkey, n);
+    q_[0].run_scan(table_->table(), req, *ti_);
+    output_scan(req, keys, values);
 }
 
 template <typename T>
-void kvtest_client<T>::rscan_sync(Str firstkey, int n,
-                                  std::vector<Str>& keys,
-                                  std::vector<Str>& values) {
-    req_ = Json::array(0, 0, firstkey, n);
-    q_[0].run_rscan(table_->table(), req_, *ti_);
-    output_scan(req_, keys, values);
-}
-
-template <typename T>
-void kvtest_client<T>::scan_versions_sync(Str firstkey, int n,
-                                          std::vector<Str>& keys,
-                                          std::vector<Str>& values) {
-    req_ = Json::array(0, 0, firstkey, n);
-    scan_versions_.clear();
-    q_[0].run_scan_versions(table_->table(), req_, scan_versions_, *ti_);
-    output_scan(req_, keys, values);
+void kvtest_client<T>::rscan_sync(const Str &firstkey, int n,
+                                  std::vector<Str> &keys,
+                                  std::vector<Str> &values) {
+    Json req = Json::array(0, 0, firstkey, n);
+    q_[0].run_rscan(table_->table(), req, *ti_);
+    output_scan(req, keys, values);
 }
 
 template <typename T>
@@ -461,23 +414,15 @@ void kvtest_client<T>::output_scan(const Json& req, std::vector<Str>& keys,
 }
 
 template <typename T>
-void kvtest_client<T>::put(Str key, Str value) {
+void kvtest_client<T>::put(const Str &key, const Str &value) {
     q_[0].run_replace(table_->table(), key, value, *ti_);
 }
 
 template <typename T>
-void kvtest_client<T>::insert_check(Str key, Str value) {
-    if (unlikely(q_[0].run_replace(table_->table(), key, value, *ti_) != Inserted)) {
-        fail("insert(%s) did not insert\n", String(key).printable().c_str());
-    }
-}
-
-template <typename T>
-void kvtest_client<T>::put_col(Str key, int col, Str value) {
+void kvtest_client<T>::put_col(const Str &key, int col, const Str &value) {
 #if !MASSTREE_ROW_TYPE_STR
-    if (!kvo_) {
+    if (!kvo_)
         kvo_ = new_kvout(-1, 2048);
-    }
     Json x[2] = {Json(col), Json(String::make_stable(value))};
     q_[0].run_put(table_->table(), key, &x[0], &x[2], *ti_);
 #else
@@ -486,25 +431,18 @@ void kvtest_client<T>::put_col(Str key, int col, Str value) {
 #endif
 }
 
-template <typename T> inline bool kvtest_remove(kvtest_client<T> &client, Str key) {
+template <typename T> inline bool kvtest_remove(kvtest_client<T> &client, const Str &key) {
     return client.q_[0].run_remove(client.table_->table(), key, *client.ti_);
 }
 
 template <typename T>
-void kvtest_client<T>::remove(Str key) {
+void kvtest_client<T>::remove(const Str &key) {
     (void) kvtest_remove(*this, key);
 }
 
 template <typename T>
-bool kvtest_client<T>::remove_sync(Str key) {
+bool kvtest_client<T>::remove_sync(const Str &key) {
     return kvtest_remove(*this, key);
-}
-
-template <typename T>
-void kvtest_client<T>::remove_check(Str key) {
-    if (unlikely(!kvtest_remove(*this, key))) {
-        fail("remove(%s) did not remove\n", String(key).printable().c_str());
-    }
 }
 
 template <typename T>
@@ -530,8 +468,8 @@ void kvtest_client<T>::notice(const char *fmt, ...) {
 
 template <typename T>
 void kvtest_client<T>::fail(const char *fmt, ...) {
-    static nodeversion32 failing_lock(false);
-    static nodeversion32 fail_message_lock(false);
+    static nodeversion failing_lock(false);
+    static nodeversion fail_message_lock(false);
     static String fail_message;
 
     va_list val;
@@ -550,7 +488,7 @@ void kvtest_client<T>::fail(const char *fmt, ...) {
 
     failing_lock.lock();
     fprintf(stdout, "%d: %s", ti_->index(), m.c_str());
-    kvtest_print(*table_, stdout, ti_);
+    kvtest_print(*table_, stdout, 0, ti_);
 
     always_assert(0);
 }
@@ -583,7 +521,6 @@ MAKE_TESTRUNNER(rw4fixed, kvtest_rw4fixed(client));
 MAKE_TESTRUNNER(wd1, kvtest_wd1(10000000, 1, client));
 MAKE_TESTRUNNER(wd1m1, kvtest_wd1(100000000, 1, client));
 MAKE_TESTRUNNER(wd1m2, kvtest_wd1(1000000000, 4, client));
-MAKE_TESTRUNNER(wd3, kvtest_wd3(client, 70 * client.nthreads()));
 MAKE_TESTRUNNER(same, kvtest_same(client));
 MAKE_TESTRUNNER(rwsmall24, kvtest_rwsmall24(client));
 MAKE_TESTRUNNER(rwsep24, kvtest_rwsep24(client));
@@ -604,7 +541,6 @@ MAKE_TESTRUNNER(rscan1, kvtest_rscan1(client, 0));
 MAKE_TESTRUNNER(rscan1q80, kvtest_rscan1(client, 0.8));
 MAKE_TESTRUNNER(splitremove1, kvtest_splitremove1(client));
 MAKE_TESTRUNNER(url, kvtest_url(client));
-MAKE_TESTRUNNER(conflictscan1, kvtest_conflictscan1(client));
 
 
 enum {
@@ -636,9 +572,7 @@ struct test_thread {
             table_->stats(test_output_file);
         }
     }
-    static void* go(void* x) {
-        threadinfo* ti = reinterpret_cast<threadinfo*>(x);
-        ti->pthread() = pthread_self();
+    static void* go(threadinfo* ti) {
         assert(table_);
 #if __linux__
         if (pinthreads) {
@@ -683,9 +617,8 @@ struct test_thread {
             ++subtestno;
         }
         int at = fetch_and_add(&active_threads_, -1);
-        if (at == 1 && print_table) {
-            kvtest_print(*table_, stdout, tt.client_.ti_);
-        }
+        if (at == 1 && print_table)
+            kvtest_print(*table_, stdout, 0, tt.client_.ti_);
         if (at == 1 && json_stats) {
             Json j;
             kvtest_json_stats(*table_, j, *tt.client_.ti_);
@@ -698,25 +631,23 @@ struct test_thread {
         return 0;
     }
     void ready_timeouts() {
-        for (size_t i = 0; i < arraysize(timeout); ++i) {
+        for (size_t i = 0; i < arraysize(timeout); ++i)
             timeout[i] = false;
-        }
-        if (duration[0]) {
+        if (!lazy_timer && duration[0])
             xalarm(duration[0]);
-        }
     }
-    static T* table_;
+    static T *table_;
     static unsigned active_threads_;
     kvtest_client<T> client_;
 };
-template <typename T> T* test_thread<T>::table_;
+template <typename T> T *test_thread<T>::table_;
 template <typename T> unsigned test_thread<T>::active_threads_;
 
 typedef test_thread<Masstree::default_table> masstree_test_thread;
 
 static struct {
     const char *treetype;
-    void* (*go_func)(void*);
+    void* (*go_func)(threadinfo*);
     void (*setup_func)(threadinfo*, int);
 } test_thread_map[] = {
     { "masstree", masstree_test_thread::go, masstree_test_thread::setup },
@@ -727,17 +658,17 @@ static struct {
 };
 
 
-void runtest(int nthreads, void* (*func)(void*)) {
-    std::vector<threadinfo*> tis;
+void runtest(int nthreads, void* (*func)(threadinfo*)) {
+    std::vector<threadinfo *> tis;
     for (int i = 0; i < nthreads; ++i)
         tis.push_back(threadinfo::make(threadinfo::TI_PROCESS, i));
     signal(SIGALRM, test_timeout);
     for (int i = 0; i < nthreads; ++i) {
-        int r = pthread_create(&tis[i]->pthread(), 0, func, tis[i]);
+        int r = tis[i]->run(func);
         always_assert(r == 0);
     }
     for (int i = 0; i < nthreads; ++i)
-        pthread_join(tis[i]->pthread(), 0);
+        pthread_join(tis[i]->threadid(), 0);
 }
 
 
@@ -772,12 +703,13 @@ enum { clp_val_normalize = Clp_ValFirstUser, clp_val_suffixdouble };
 enum { opt_pin = 1, opt_port, opt_duration,
        opt_test, opt_test_name, opt_threads, opt_trials, opt_quiet, opt_print,
        opt_normalize, opt_limit, opt_notebook, opt_compare, opt_no_run,
-       opt_gid, opt_tree_stats, opt_rscale_ncores, opt_cores,
-       opt_stats, opt_help, opt_yrange };
+       opt_lazy_timer, opt_gid, opt_tree_stats, opt_rscale_ncores, opt_cores,
+       opt_stats, opt_help };
 static const Clp_Option options[] = {
     { "pin", 'p', opt_pin, 0, Clp_Negate },
     { "port", 0, opt_port, Clp_ValInt, 0 },
     { "duration", 'd', opt_duration, Clp_ValDouble, 0 },
+    { "lazy-timer", 0, opt_lazy_timer, 0, 0 },
     { "limit", 'l', opt_limit, clp_val_suffixdouble, 0 },
     { "normalize", 0, opt_normalize, clp_val_normalize, Clp_Negate },
     { "test", 0, opt_test, Clp_ValString, 0 },
@@ -797,7 +729,6 @@ static const Clp_Option options[] = {
     { "stats", 0, opt_stats, 0, 0 },
     { "compare", 'c', opt_compare, Clp_ValString, 0 },
     { "cores", 0, opt_cores, Clp_ValString, 0 },
-    { "yrange", 0, opt_yrange, Clp_ValString, 0 },
     { "no-run", 'n', opt_no_run, 0, 0 },
     { "help", 0, opt_help, 0, 0 }
 };
@@ -816,11 +747,9 @@ Options:\n\
   -d, --duration=TIME      Limit relevant tests to TIME seconds.\n\
   -b, --notebook=FILE      Record JSON results in FILE (notebook-mttest.json).\n\
       --no-notebook        Do not record JSON results.\n\
-      --print              Print table after test.\n\
 \n\
   -n, --no-run             Do not run new tests.\n\
   -c, --compare=EXPERIMENT Generated plot compares to EXPERIMENT.\n\
-      --yrange=YRANGE      Set Y range for plot.\n\
 \n\
 Known TESTs:\n",
            (int) sysconf(_SC_NPROCESSORS_ONLN));
@@ -910,6 +839,9 @@ main(int argc, char *argv[])
         case opt_duration:
             duration[0] = clp->val.d;
             break;
+        case opt_lazy_timer:
+            lazy_timer = true;
+            break;
         case opt_limit:
             test_limit = uint64_t(clp->val.d);
             break;
@@ -930,9 +862,6 @@ main(int argc, char *argv[])
             break;
         case opt_stats:
             json_stats = true;
-            break;
-        case opt_yrange:
-            gnuplot_yrange = clp->vstr;
             break;
         case opt_notebook:
             if (clp->negated)
@@ -982,19 +911,17 @@ main(int argc, char *argv[])
             if (const char* eqchr = strchr(clp->vstr, '=')) {
                 Json& param = test_param[String(clp->vstr, eqchr)];
                 const char* end_vstr = clp->vstr + strlen(clp->vstr);
-                if (param.assign_parse(eqchr + 1, end_vstr)) {
-                    // OK, param was valid JSON
-                } else if (eqchr[1] != 0) {
+                if (param.assign_parse(eqchr + 1, end_vstr))
+                    /* OK, param was valid JSON */;
+                else if (eqchr[1] != 0)
                     param = String(eqchr + 1, end_vstr);
-                } else {
+                else
                     param = Json();
-                }
             } else {
                 // otherwise, tree or test
                 bool is_treetype = false;
-                for (int i = 0; i < (int) arraysize(test_thread_map) && !is_treetype; ++i) {
+                for (int i = 0; i < (int) arraysize(test_thread_map) && !is_treetype; ++i)
                     is_treetype = (strcmp(test_thread_map[i].treetype, clp->vstr) == 0);
-                }
                 (is_treetype ? treetypes.push_back(clp->vstr) : tests.push_back(clp->vstr));
             }
             break;
@@ -1031,6 +958,9 @@ Try 'mttest --help' for options.\n");
     if (tests.empty())
         tests.push_back("rw1");
 
+    // arrange for a per-thread threadinfo pointer
+    ret = pthread_key_create(&threadinfo::key, 0);
+    always_assert(ret == 0);
     pthread_mutex_init(&subtest_mutex, 0);
     pthread_cond_init(&subtest_cond, 0);
 
@@ -1086,7 +1016,7 @@ Try 'mttest --help' for options.\n");
     // print Gnuplot
     if (ntrials != 0)
         comparisons.insert(comparisons.begin(), "");
-    if (!isatty(STDOUT_FILENO) || (ntrials == 0 && comparisons.size()))
+    if (!isatty(STDOUT_FILENO))
         print_gnuplot(stdout, kvstats_name, kvstats_name + arraysize(kvstats_name),
                       comparisons, normtype);
 
@@ -1095,10 +1025,8 @@ Try 'mttest --help' for options.\n");
 
 static void run_one_test_body(int trial, const char *treetype, const char *test) {
     threadinfo *main_ti = threadinfo::make(threadinfo::TI_MAIN, -1);
-    main_ti->pthread() = pthread_self();
-    auto e = timestamp() >> 16;
-    globalepoch.store(e);
-    active_epoch.store(e);
+    main_ti->run();
+    globalepoch = timestamp() >> 16;
     for (int i = 0; i < (int) arraysize(test_thread_map); ++i)
         if (strcmp(test_thread_map[i].treetype, treetype) == 0) {
             current_test_name = test;
@@ -1253,8 +1181,6 @@ void gnuplot_info::print(FILE *f, const char * const *types_begin) {
             udpthreads);
     fprintf(f, "set terminal png\n");
     fprintf(f, "set xrange [%g:%g]\n", 1 - treetypedelta, pos + treetypedelta);
-    if (gnuplot_yrange)
-        fprintf(f, "set yrange [%s]\n", gnuplot_yrange.c_str());
     fprintf(f, "set xtics rotate by 45 right (%s) font \"Verdana,9\"\n", xtics.c_str());
     fprintf(f, "set key top left Left reverse\n");
     if (normalizetype == normtype_none)

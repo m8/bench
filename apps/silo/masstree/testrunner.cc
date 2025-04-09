@@ -47,7 +47,7 @@ void testrunner_base::print_names(FILE* stream, int ncol) {
         for (int col = 0; col != ncol; ++col, off += percol)
             if (off < names.size())
                 fprintf(stream, "%*s   %s",
-                        (int) (col ? colwidth[col-1] - names[off-percol].length() : 0), "",
+                        col ? colwidth[col-1] - names[off-percol].length() : 0, "",
                         names[off].c_str());
         fprintf(stream, "\n");
     }

@@ -1,42 +1,39 @@
 AR = ar
 CC = @CC@
 CXX = @CXX@
-CPPFLAGS = @CPPFLAGS@
-CXXFLAGS = @CXXFLAGS@ -pthread
-RANLIB = @RANLIB@
+CFLAGS = -g -W -Wall -O3
 DEPSDIR := .deps
 DEPCFLAGS = -MD -MF $(DEPSDIR)/$*.d -MP
 ifeq ($(strip $(MEMMGR)), )
   MEMMGR = @MALLOC_LIBS@
 endif
 ifneq ($(strip $(KEYSWAP)), )
-  CPPFLAGS += -DKEYSWAP
+  CFLAGS += -DKEYSWAP
 endif
 ifneq ($(strip $(NOPREFETCH)), )
-  CPPFLAGS += -DNOPREFETCH
+  CFLAGS += -DNOPREFETCH
 endif
 ifneq ($(strip $(NOSUPERPAGE)), )
-  CPPFLAGS += -DNOSUPERPAGE
+  CFLAGS += -DNOSUPERPAGE
 endif
-LIBS = @LIBS@ -lm
+LIBS = @LIBS@ -lpthread -lm
 LDFLAGS = @LDFLAGS@
 
 all: test_atomics mtd mtclient mttest
 
 %.o: %.c config.h $(DEPSDIR)/stamp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPCFLAGS) -include config.h -c -o $@ $<
+	$(CXX) $(CFLAGS) $(DEPCFLAGS) -include config.h -c -o $@ $<
 
 %.o: %.cc config.h $(DEPSDIR)/stamp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPCFLAGS) -include config.h -c -o $@ $<
+	$(CXX) $(CFLAGS) $(DEPCFLAGS) -include config.h -c -o $@ $<
 
 %.S: %.o
 	objdump -S $< > $@
 
 libjson.a: json.o string.o straccum.o str.o msgpack.o \
-	clp.o kvrandom.o compiler.o memdebug.o kvthread.o
-	@rm -f $@
-	$(AR) cr $@ $^
-	$(RANLIB) $@
+	clp.o kvrandom.o compiler.o kvthread.o
+	@/bin/rm -f $@
+	$(AR) cru $@ $^
 
 KVTREES = query_masstree.o \
 	value_string.o value_array.o value_versioned_array.o \
@@ -44,33 +41,27 @@ KVTREES = query_masstree.o \
 
 mtd: mtd.o log.o checkpoint.o file.o misc.o $(KVTREES) \
 	kvio.o libjson.a
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
 
 mtclient: mtclient.o misc.o testrunner.o kvio.o libjson.a
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 mttest: mttest.o misc.o checkpoint.o $(KVTREES) testrunner.o \
 	kvio.o libjson.a
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
 
 test_string: test_string.o string.o straccum.o compiler.o
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
 
 test_atomics: test_atomics.o string.o straccum.o kvrandom.o \
 	json.o compiler.o kvio.o
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
 
 jsontest: jsontest.o string.o straccum.o json.o compiler.o
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
 
 msgpacktest: msgpacktest.o string.o straccum.o json.o compiler.o msgpack.o
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
-
-scantest: scantest.o compiler.o misc.o $(KVTREES) libjson.a
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
-
-unit-mt: unit-mt.o compiler.o misc.o libjson.a
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CFLAGS) -o $@ $^ $(MEMMGR) $(LDFLAGS) $(LIBS)
 
 config.h: stamp-h
 

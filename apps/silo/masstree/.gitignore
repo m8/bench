@@ -6,10 +6,8 @@
 /.deps
 /autom4te.cache
 /config.h
-/config.h.in
 /config.log
 /config.status
-/configure
 /msgpacktest
 /mtclient
 /mtd
@@ -18,11 +16,10 @@ kvd-log-*
 kvd-ckp-*
 notebook-kvtest.json
 stamp-h
-/jsontest
-/scantest
-/test_atomics
-/test_binsearch
-/test_string
+jsontest
+test_atomics
+test_binsearch
+test_string
 bench/GNUmakefile
 bench/client
 bench/load/YCSB

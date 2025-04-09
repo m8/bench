@@ -14,7 +14,7 @@
  * is legally binding.
  */
 // -*- mode: c++ -*-
-// mtd: key/value server
+// kvd: key/value server
 //
 
 #include <stdio.h>
@@ -83,8 +83,7 @@ static std::vector<int> cores;
 static bool logging = true;
 static bool pinthreads = false;
 static bool recovery_only = false;
-relaxed_atomic<mrcu_epoch_type> globalepoch(1);     // global epoch, updated by main thread regularly
-relaxed_atomic<mrcu_epoch_type> active_epoch(1);
+volatile uint64_t globalepoch = 1;     // global epoch, updated by main thread regularly
 static int port = 2117;
 static uint64_t test_limit = ~uint64_t(0);
 static int doprint = 0;
@@ -114,15 +113,15 @@ static pthread_mutex_t checkpoint_mu;
 
 static void prepare_thread(threadinfo *ti);
 static int* tcp_thread_pipes;
-static void* tcp_threadfunc(void* ti);
-static void* udp_threadfunc(void* ti);
+static void* tcp_threadfunc(threadinfo* ti);
+static void* udp_threadfunc(threadinfo* ti);
 
 static void log_init();
-static void recover(threadinfo*);
+static void recover(threadinfo *);
 static kvepoch_t read_checkpoint(threadinfo*, const char *path);
 
-static void* conc_checkpointer(void* ti);
-static void recovercheckpoint(threadinfo* ti);
+static void* conc_checkpointer(threadinfo* ti);
+static void recovercheckpoint(threadinfo *ti);
 
 static void *canceling(void *);
 static void catchint(int);
@@ -358,8 +357,8 @@ void kvtest_client::notice(const char *fmt, ...) {
 }
 
 void kvtest_client::fail(const char *fmt, ...) {
-    static nodeversion32 failing_lock(false);
-    static nodeversion32 fail_message_lock(false);
+    static nodeversion failing_lock(false);
+    static nodeversion fail_message_lock(false);
     static String fail_message;
     failing = 1;
 
@@ -380,16 +379,15 @@ void kvtest_client::fail(const char *fmt, ...) {
     if (doprint) {
         failing_lock.lock();
         fprintf(stdout, "%d: %s", ti_->index(), m.c_str());
-        tree->print(stdout);
+        tree->print(stdout, 0);
         fflush(stdout);
     }
 
     always_assert(0);
 }
 
-static void* testgo(void* x) {
-    kvtest_client *kc = reinterpret_cast<kvtest_client*>(x);
-    kc->ti_->pthread() = pthread_self();
+static void* testgo(threadinfo* ti) {
+    kvtest_client *kc = (kvtest_client*) ti->thread_data();
     prepare_thread(kc->ti_);
 
     if (strcmp(kc->testname_, "rw1") == 0)
@@ -446,11 +444,11 @@ void runtest(const char *testname, int nthreads) {
     if (duration[0])
         xalarm(duration[0]);
     for (int i = 0; i < nthreads; ++i) {
-        int r = pthread_create(&clients[i].ti_->pthread(), 0, testgo, &clients[i]);
+        int r = clients[i].ti_->run(testgo, &clients[i]);
         always_assert(r == 0);
     }
     for (int i = 0; i < nthreads; ++i)
-        pthread_join(clients[i].ti_->pthread(), 0);
+        pthread_join(clients[i].ti_->threadid(), 0);
 
     kvstats kvs[arraysize(kvstats_name)];
     for (int i = 0; i < nthreads; ++i)
@@ -562,7 +560,7 @@ struct conninfo {
 enum { clp_val_suffixdouble = Clp_ValFirstUser };
 enum { opt_nolog = 1, opt_pin, opt_logdir, opt_port, opt_ckpdir, opt_duration,
        opt_test, opt_test_name, opt_threads, opt_cores,
-       opt_print, opt_norun, opt_checkpoint, opt_limit, opt_epoch_interval };
+       opt_print, opt_norun, opt_checkpoint, opt_limit };
 static const Clp_Option options[] = {
     { "no-log", 0, opt_nolog, 0, 0 },
     { 0, 'n', opt_nolog, 0, 0 },
@@ -590,8 +588,7 @@ static const Clp_Option options[] = {
     { "test-rw1fixed", 0, opt_test_name, 0, 0 },
     { "threads", 'j', opt_threads, Clp_ValInt, 0 },
     { "cores", 0, opt_cores, Clp_ValString, 0 },
-    { "print", 0, opt_print, 0, Clp_Negate },
-    { "epoch-interval", 0, opt_epoch_interval, Clp_ValDouble, 0 }
+    { "print", 0, opt_print, 0, Clp_Negate }
 };
 
 int
@@ -604,7 +601,6 @@ main(int argc, char *argv[])
   Clp_Parser *clp = Clp_NewParser(argc, argv, (int) arraysize(options), options);
   Clp_AddType(clp, clp_val_suffixdouble, Clp_DisallowOptions, clp_parse_suffixdouble, 0);
   int opt;
-  double epoch_interval_ms = 1000;
   while ((opt = Clp_Next(clp)) >= 0) {
       switch (opt) {
       case opt_nolog:
@@ -683,11 +679,8 @@ main(int argc, char *argv[])
       case opt_norun:
           recovery_only = true;
           break;
-      case opt_epoch_interval:
-	epoch_interval_ms = clp->val.d;
-	break;
       default:
-          fprintf(stderr, "Usage: mtd [-np] [--ld dir1[,dir2,...]] [--cd dir1[,dir2,...]]\n");
+          fprintf(stderr, "Usage: kvd [-np] [--ld dir1[,dir2,...]] [--cd dir1[,dir2,...]]\n");
           exit(EXIT_FAILURE);
       }
   }
@@ -710,21 +703,21 @@ main(int argc, char *argv[])
   log_epoch_interval.tv_sec = 0;
   log_epoch_interval.tv_usec = 200000;
 
-  // set a timer for incrementing the global epoch
+  // increment the global epoch every second
   if (!dotest) {
-      if (!epoch_interval_ms) {
-	  printf("WARNING: epoch interval is 0, it means no GC is executed\n");
-      } else {
-	  signal(SIGALRM, epochinc);
-	  struct itimerval etimer;
-	  etimer.it_interval.tv_sec = epoch_interval_ms / 1000;
-	  etimer.it_interval.tv_usec = fmod(epoch_interval_ms, 1000) * 1000;
-	  etimer.it_value.tv_sec = epoch_interval_ms / 1000;
-	  etimer.it_value.tv_usec = fmod(epoch_interval_ms, 1000) * 1000;
-	  ret = setitimer(ITIMER_REAL, &etimer, NULL);
-	  always_assert(ret == 0);
-      }
+      signal(SIGALRM, epochinc);
+      struct itimerval etimer;
+      etimer.it_interval.tv_sec = 1;
+      etimer.it_interval.tv_usec = 0;
+      etimer.it_value.tv_sec = 1;
+      etimer.it_value.tv_usec = 0;
+      ret = setitimer(ITIMER_REAL, &etimer, NULL);
+      always_assert(ret == 0);
   }
+
+  // arrange for a per-thread threadinfo pointer
+  ret = pthread_key_create(&threadinfo::key, 0);
+  always_assert(ret == 0);
 
   // for parallel recovery
   ret = pthread_cond_init(&rec_cond, 0);
@@ -739,7 +732,7 @@ main(int argc, char *argv[])
   always_assert(ret == 0);
 
   threadinfo *main_ti = threadinfo::make(threadinfo::TI_MAIN, -1);
-  main_ti->pthread() = pthread_self();
+  main_ti->run();
 
   initial_timestamp = timestamp();
   tree = new Masstree::default_table;
@@ -763,7 +756,7 @@ main(int argc, char *argv[])
       printf("%d udp threads (ports %d-%d)\n", udpthreads, port, port + udpthreads - 1);
   for(i = 0; i < udpthreads; i++){
     threadinfo *ti = threadinfo::make(threadinfo::TI_PROCESS, i);
-    ret = pthread_create(&ti->pthread(), 0, udp_threadfunc, ti);
+    ret = ti->run(udp_threadfunc);
     always_assert(ret == 0);
   }
 
@@ -775,7 +768,7 @@ main(int argc, char *argv[])
         runtest(dotest, tcpthreads);
       tree->stats(stderr);
       if (doprint)
-          tree->print(stdout);
+          tree->print(stdout, 0);
       exit(0);
   }
 
@@ -809,16 +802,15 @@ main(int argc, char *argv[])
     threadinfo *ti = threadinfo::make(threadinfo::TI_PROCESS, i);
     ret = pipe(&tcp_thread_pipes[i * 2]);
     always_assert(ret == 0);
-    ret = pthread_create(&ti->pthread(), 0, tcp_threadfunc, ti);
+    ret = ti->run(tcp_threadfunc);
     always_assert(ret == 0);
     tcpti[i] = ti;
   }
   // Create a canceling thread.
   ret = pipe(quit_pipe);
-  always_assert(ret == 0);
-  pthread_t canceling_tid;
-  ret = pthread_create(&canceling_tid, NULL, canceling, NULL);
-  always_assert(ret == 0);
+  assert(ret == 0);
+  pthread_t tid;
+  pthread_create(&tid, NULL, canceling, NULL);
 
   static int next = 0;
   while(1){
@@ -905,22 +897,25 @@ canceling(void *)
     pthread_cond_signal(&checkpoint_cond);
     pthread_mutex_unlock(&checkpoint_mu);
 
+    pthread_t me = pthread_self();
     fprintf(stderr, "\n");
     // cancel outstanding threads. Checkpointing threads will exit safely
     // when the checkpointing thread 0 sees go_quit, and don't need cancel
     for (threadinfo *ti = threadinfo::allthreads; ti; ti = ti->next())
         if (ti->purpose() != threadinfo::TI_MAIN
-            && ti->purpose() != threadinfo::TI_CHECKPOINT) {
-            int r = pthread_cancel(ti->pthread());
+            && ti->purpose() != threadinfo::TI_CHECKPOINT
+            && !pthread_equal(me, ti->threadid())) {
+            int r = pthread_cancel(ti->threadid());
             always_assert(r == 0);
         }
 
     // join canceled threads
     for (threadinfo *ti = threadinfo::allthreads; ti; ti = ti->next())
-        if (ti->purpose() != threadinfo::TI_MAIN) {
+        if (ti->purpose() != threadinfo::TI_MAIN
+            && !pthread_equal(me, ti->threadid())) {
             fprintf(stderr, "joining thread %s:%d\n",
                     threadtype(ti->purpose()), ti->index());
-            int r = pthread_join(ti->pthread(), 0);
+            int r = pthread_join(ti->threadid(), 0);
             always_assert(r == 0);
         }
     tree->stats(stderr);
@@ -930,8 +925,7 @@ canceling(void *)
 void
 epochinc(int)
 {
-    globalepoch.store(globalepoch.load() + 2);
-    active_epoch.store(threadinfo::min_active_epoch());
+    globalepoch += 2;
 }
 
 // Return 1 if success, -1 if I/O error or protocol unmatch
@@ -1108,9 +1102,7 @@ void prepare_thread(threadinfo *ti) {
         ti->set_logger(&logs->log(ti->index() % nlogger));
 }
 
-void* tcp_threadfunc(void* x) {
-    threadinfo* ti = reinterpret_cast<threadinfo*>(x);
-    ti->pthread() = pthread_self();
+void* tcp_threadfunc(threadinfo* ti) {
     prepare_thread(ti);
 
     int myfd = tcp_thread_pipes[2 * ti->index()];
@@ -1178,9 +1170,8 @@ void* tcp_threadfunc(void* x) {
 }
 
 // serve a client udp socket, in a dedicated thread
-void* udp_threadfunc(void* x) {
-  threadinfo* ti = reinterpret_cast<threadinfo*>(x);
-  ti->pthread() = pthread_self();
+void* udp_threadfunc(threadinfo* ti) {
+  int ret;
   prepare_thread(ti);
 
   struct sockaddr_in sin;
@@ -1190,7 +1181,7 @@ void* udp_threadfunc(void* x) {
 
   int s = socket(AF_INET, SOCK_DGRAM, 0);
   always_assert(s >= 0);
-  int ret = bind(s, (struct sockaddr *) &sin, sizeof(sin));
+  ret = bind(s, (struct sockaddr *) &sin, sizeof(sin));
   always_assert(ret == 0 && "bind failed");
   int sobuflen = 512*1024;
   setsockopt(s, SOL_SOCKET, SO_RCVBUF, &sobuflen, sizeof(sobuflen));
@@ -1261,7 +1252,7 @@ void log_init() {
     threadinfo *ti = threadinfo::make(threadinfo::TI_CHECKPOINT, i);
     cks[i].state = CKState_Uninit;
     cks[i].ti = ti;
-    ret = pthread_create(&ti->pthread(), 0, conc_checkpointer, ti);
+    ret = ti->run(conc_checkpointer);
     always_assert(ret == 0);
   }
 }
@@ -1602,9 +1593,7 @@ max_flushed_epoch()
 }
 
 // concurrent periodic checkpoint
-void* conc_checkpointer(void* x) {
-  threadinfo* ti = reinterpret_cast<threadinfo*>(x);
-  ti->pthread() = pthread_self();
+void* conc_checkpointer(threadinfo* ti) {
   recovercheckpoint(ti);
   ckstate *c = &cks[ti->index()];
   c->count = 0;

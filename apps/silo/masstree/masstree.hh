@@ -23,7 +23,6 @@ namespace Masstree {
 using lcdf::Str;
 using lcdf::String;
 
-class key_unparse_printable_string;
 template <typename T> class value_print;
 
 template <int LW = 15, int IW = LW> struct nodeparams {
@@ -33,12 +32,8 @@ template <int LW = 15, int IW = LW> struct nodeparams {
     static constexpr bool prefetch = true;
     static constexpr int bound_method = bound_method_binary;
     static constexpr int debug_level = 0;
+    static constexpr bool printable_keys = true;
     typedef uint64_t ikey_type;
-    typedef uint32_t nodeversion_value_type;
-    static constexpr bool need_phantom_epoch = true;
-    typedef uint64_t phantom_epoch_type;
-    static constexpr ssize_t print_max_indent_depth = 12;
-    typedef key_unparse_printable_string key_unparse_type;
 };
 
 template <int LW, int IW> constexpr int nodeparams<LW, IW>::leaf_width;
@@ -57,7 +52,7 @@ template <typename P> class tcursor;
 template <typename P>
 class basic_table {
   public:
-    typedef P parameters_type;
+    typedef P param_type;
     typedef node_base<P> node_type;
     typedef leaf<P> leaf_type;
     typedef typename P::value_type value_type;
@@ -80,7 +75,12 @@ class basic_table {
     template <typename F>
     int rscan(Str firstkey, bool matchfirst, F& scanner, threadinfo& ti) const;
 
-    inline void print(FILE* f = 0) const;
+    template <typename F>
+    inline int modify(Str key, F& f, threadinfo& ti);
+    template <typename F>
+    inline int modify_insert(Str key, F& f, threadinfo& ti);
+
+    inline void print(FILE* f = 0, int indent = 0) const;
 
   private:
     node_type* root_;

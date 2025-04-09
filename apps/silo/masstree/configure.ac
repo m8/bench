@@ -1,18 +1,16 @@
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([masstree-beta],[0.1])
-AC_PREREQ([2.69])
+AC_INIT([masstree-beta], [0.1])
+AC_PREREQ(2.60)
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([GNUmakefile])
 AC_SUBST(ac_configure_args)
 
 ac_user_cxx=${CXX+y}
-if test "${CXXFLAGS+y}" != y; then CXXFLAGS="-g -W -Wall -O3"; fi
 
 AC_PROG_CC
 AC_PROG_CXX
-AC_LANG([C++])
-AC_PROG_RANLIB
+AC_LANG_CPLUSPLUS
 
 AC_DEFINE([WORDS_BIGENDIAN_SET], [1], [Define if WORDS_BIGENDIAN has been set.])
 AC_C_BIGENDIAN()
@@ -108,56 +106,60 @@ KVDB_CHECK_BUILTIN([__sync_lock_release_set],
 
 dnl C++ features
 
-dnl Mimics AC_CACHE_CHECK(MESSAGE, CACHE-ID, COMMANDS), but retries COMMANDS
-dnl with CXX='${CXX} -std=gnu++1y' if the user has not specified CXX.
-AC_DEFUN([KVDB_CHECK_C11_FEATURE], [
-    AC_CACHE_CHECK([$1], [$2], [$3])
-
-    if test "$$2" != yes -a -z "$ac_user_cxx"; then
-        CXX="${CXX} -std=gnu++1y"
-        AC_MSG_CHECKING([$1 with -std=gnu++1y])
-        $3
-        AC_MSG_RESULT([$$2])
-    fi
-])
-
-KVDB_CHECK_C11_FEATURE([whether the C++ compiler understands 'auto'], [ac_cv_cxx_auto], [
+AC_CACHE_CHECK([whether the C++ compiler understands 'auto'], [ac_cv_cxx_auto], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[struct s { int a; }; int f(s x) { auto &y = x; return y.a; }]], [[]])],
 	[ac_cv_cxx_auto=yes], [ac_cv_cxx_auto=no])])
+if test "$ac_cv_cxx_auto" != yes -a -z "$ac_user_cxx"; then
+    CXX="${CXX} -std=gnu++0x"
+    AC_MSG_CHECKING([whether the C++ compiler with -std=gnu++0x understands 'auto'])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[struct s { int a; }; int f(s x) { auto &y = x; return y.a; }]], [[]])],
+	[ac_cv_cxx_auto=yes], [ac_cv_cxx_auto=no])
+    AC_MSG_RESULT([$ac_cv_cxx_auto])
+fi
 
-KVDB_CHECK_C11_FEATURE([whether the C++ compiler understands constexpr], [ac_cv_cxx_constexpr], [
+if test "$ac_cv_cxx_auto" = yes; then
+    AC_DEFINE([HAVE_CXX_AUTO], [1], [Define if the C++ compiler understands 'auto'.])
+else
+    AC_MSG_ERROR([
+
+The C++ compiler does not appear to understand C++11.
+To fix this problem, try supplying a "CXX" argument to ./configure,
+such as "./configure CXX='c++ -std=gnu++0x'".
+
+========================================================])
+fi
+
+AC_CACHE_CHECK([whether the C++ compiler understands constexpr], [ac_cv_cxx_constexpr], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[constexpr int f(int x) { return x + 1; }]], [[]])],
 	[ac_cv_cxx_constexpr=yes], [ac_cv_cxx_constexpr=no])])
+if test "$ac_cv_cxx_constexpr" = yes; then
+    AC_DEFINE([HAVE_CXX_CONSTEXPR], [1], [Define if the C++ compiler understands constexpr.])
+fi
 
-KVDB_CHECK_C11_FEATURE([whether the C++ compiler understands static_assert], [ac_cv_cxx_static_assert], [
+AC_CACHE_CHECK([whether the C++ compiler understands static_assert], [ac_cv_cxx_static_assert], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[const int f = 2;]], [[static_assert(f == 2, "f should be 2");]])],
 	[ac_cv_cxx_static_assert=yes], [ac_cv_cxx_static_assert=no])])
+if test "$ac_cv_cxx_static_assert" = yes; then
+    AC_DEFINE([HAVE_CXX_STATIC_ASSERT], [1], [Define if the C++ compiler understands static_assert.])
+fi
 
-KVDB_CHECK_C11_FEATURE([whether the C++ compiler understands rvalue references], [ac_cv_cxx_rvalue_references], [
+AC_CACHE_CHECK([whether the C++ compiler understands rvalue references], [ac_cv_cxx_rvalue_references], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[int f(int &) { return 1; } int f(int &&) { return 0; }]], [[return f(int());]])],
 	[ac_cv_cxx_rvalue_references=yes], [ac_cv_cxx_rvalue_references=no])])
+if test "$ac_cv_cxx_rvalue_references" = yes; then
+    AC_DEFINE([HAVE_CXX_RVALUE_REFERENCES], [1], [Define if the C++ compiler understands rvalue references.])
+fi
 
-KVDB_CHECK_C11_FEATURE([whether the C++ compiler understands template alias], [ac_cv_cxx_template_alias], [
+AC_CACHE_CHECK([whether the C++ compiler understands template alias], [ac_cv_cxx_template_alias], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[template <typename T> struct X { typedef T type; }; template <typename T> using Y = X<T>; int f(int x) { return x; }]], [[return f(Y<int>::type());]])],
 	[ac_cv_cxx_template_alias=yes], [ac_cv_cxx_template_alias=no])])
 if test "$ac_cv_cxx_template_alias" = yes; then
     AC_DEFINE([HAVE_CXX_TEMPLATE_ALIAS], [1], [Define if the C++ compiler understands template alias.])
 fi
 
-if test "$ac_cv_cxx_auto" != yes -o "$ac_cv_cxx_static_assert" != yes \
-    -o "$ac_cv_cxx_rvalue_references" != yes -o "$ac_cv_cxx_constexpr" != yes; then
-    AC_MSG_ERROR([
-
-The C++ compiler does not appear to understand C++14.
-To fix this problem, try supplying a "CXX" argument to ./configure,
-such as "./configure CXX='c++ -std=gnu++1y'".
-
-========================================================])
-fi
-
 AC_CHECK_HEADERS([type_traits])
 
-KVDB_CHECK_C11_FEATURE([for std::hash], [ac_cv_have_std_hash], [
+AC_CACHE_CHECK([for std::hash], [ac_cv_have_std_hash], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <functional>
 #include <stddef.h>],
         [[std::hash<int> h; size_t x = h(1); return x == 0;]])],
@@ -166,21 +168,16 @@ if test $ac_cv_have_std_hash = yes; then
     AC_DEFINE([HAVE_STD_HASH], [1], [Define if you have std::hash.])
 fi
 
-KVDB_CHECK_C11_FEATURE([for __has_trivial_copy], [ac_cv_have___has_trivial_copy], [
+AC_CACHE_CHECK([for __has_trivial_copy], [ac_cv_have___has_trivial_copy], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[long x = 1; if (__has_trivial_copy(long)) x = 0;]])], [ac_cv_have___has_trivial_copy=yes], [ac_cv_have___has_trivial_copy=no])])
 if test $ac_cv_have___has_trivial_copy = yes; then
     AC_DEFINE([HAVE___HAS_TRIVIAL_COPY], [1], [Define if you have the __has_trivial_copy compiler intrinsic.])
 fi
 
-KVDB_CHECK_C11_FEATURE([for __has_trivial_destructor], [ac_cv_have___has_trivial_destructor], [
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[long x = 1; if (__has_trivial_destructor(long)) x = 0;]])], [ac_cv_have___has_trivial_destructor=yes], [ac_cv_have___has_trivial_destructor=no])])
-if test $ac_cv_have___has_trivial_destructor = yes; then
-    AC_DEFINE([HAVE___HAS_TRIVIAL_DESTRUCTOR], [1], [Define if you have the __has_trivial_destructor compiler intrinsic.])
-fi
-
 if test "$ac_cv_cxx_rvalue_references" = yes; then
-    KVDB_CHECK_C11_FEATURE([for std::move], [ac_cv_std_move], [
-        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <utility>], [[long x = 0; long &&y = std::move(x);]])], [ac_cv_std_move=yes], [ac_cv_std_move=no])])
+    AC_MSG_CHECKING([for std::move])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <utility>], [[long x = 0; long &&y = std::move(x);]])], [ac_cv_std_move=yes], [ac_cv_std_move=no])
+    AC_MSG_RESULT([$ac_cv_std_move])
     if test "$ac_cv_std_move" != yes; then
         AC_MSG_ERROR([
 
@@ -191,19 +188,13 @@ If you are using clang on Mac, ensure the -stdlib=libc++ option.
     fi
 fi
 
-KVDB_CHECK_C11_FEATURE([for std::is_trivially_copyable], [ac_cv_have_std_is_trivially_copyable], [
+AC_CACHE_CHECK([for std::is_trivially_copyable], [ac_cv_have_std_is_trivially_copyable], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <type_traits>], [[return std::is_trivially_copyable<int>::value;]])], [ac_cv_have_std_is_trivially_copyable=yes], [ac_cv_have_std_is_trivially_copyable=no])])
 if test $ac_cv_have_std_is_trivially_copyable = yes; then
     AC_DEFINE([HAVE_STD_IS_TRIVIALLY_COPYABLE], [1], [Define if you have the std::is_trivially_copyable template.])
 fi
 
-KVDB_CHECK_C11_FEATURE([for std::is_trivially_destructible], [ac_cv_have_std_is_trivially_destructible], [
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <type_traits>], [[return std::is_trivially_destructible<int>::value;]])], [ac_cv_have_std_is_trivially_destructible=yes], [ac_cv_have_std_is_trivially_destructible=no])])
-if test $ac_cv_have_std_is_trivially_destructible = yes; then
-    AC_DEFINE([HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE], [1], [Define if you have the std::is_trivially_destructible template.])
-fi
-
-KVDB_CHECK_C11_FEATURE([for std::is_rvalue_reference], [ac_cv_have_std_is_rvalue_reference], [
+AC_CACHE_CHECK([for std::is_rvalue_reference], [ac_cv_have_std_is_rvalue_reference], [
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <type_traits>], [[return std::is_rvalue_reference<int>::value;]])], [ac_cv_have_std_is_rvalue_reference=yes], [ac_cv_have_std_is_rvalue_reference=no])])
 if test $ac_cv_have_std_is_rvalue_reference = yes; then
     AC_DEFINE([HAVE_STD_IS_RVALUE_REFERENCE], [1], [Define if you have the std::is_rvalue_reference template.])
@@ -212,7 +203,6 @@ fi
 
 dnl Memory allocator
 
-AC_CHECK_LIB([mimalloc], [mi_malloc], [have_mimalloc=true], [have_mimalloc=])
 AC_CHECK_LIB([flow], [malloc], [have_flow=true], [have_flow=])
 AC_CHECK_LIB([jemalloc], [mallctl], [have_jemalloc=true], [have_jemalloc=])
 AC_CHECK_LIB([tcmalloc_minimal], [tc_malloc], [have_tcmalloc_minimal=true], [have_tcmalloc_minimal=])
@@ -225,17 +215,15 @@ AC_ARG_WITH([malloc],
 
 if test \( "$ac_mtd_malloc" = tcmalloc -a -z "$have_tcmalloc_minimal" \) \
 	-o \( "$ac_mtd_malloc" = jemalloc -a -z "$have_jemalloc" \) \
-	-o \( "$ac_mtd_malloc" = mimalloc -a -z "$have_mimalloc" \) \
 	-o \( "$ac_mtd_malloc" = flow -a -z "$have_flow" \) \
         -o \( "$ac_mtd_malloc" = hoard -a -z "$have_hoard" \) ; then
     AC_MSG_ERROR([$ac_mtd_malloc not found])
-elif test "$ac_mtd_malloc" = mimalloc -o "$ac_mtd_malloc" = tcmalloc -o "$ac_mtd_malloc" = jemalloc -o "$ac_mtd_malloc" = flow -o "$ac_mtd_malloc" = hoard; then
+elif test "$ac_mtd_malloc" = tcmalloc -o "$ac_mtd_malloc" = jemalloc -o "$ac_mtd_malloc" = flow -o "$ac_mtd_malloc" = hoard; then
     :
 elif test "$ac_mtd_malloc" = yes -o "$ac_mtd_malloc" = default; then
     AC_MSG_CHECKING([for malloc library])
     if test -n "$have_flow"; then ac_mtd_malloc=flow;
     elif test -n "$have_jemalloc"; then ac_mtd_malloc=jemalloc;
-    elif test -n "$have_mimalloc"; then ac_mtd_malloc=mimalloc;
     elif test -n "$have_tcmalloc_minimal"; then ac_mtd_malloc=tcmalloc;
     else ac_mtd_malloc=malloc; fi
     AC_MSG_RESULT([$ac_mtd_malloc])
@@ -254,10 +242,6 @@ elif test "$ac_mtd_malloc" = jemalloc; then
     MALLOC_LIBS="-ljemalloc"
     AC_DEFINE([HAVE_JEMALLOC], [1], [Define if you are using libjemalloc for malloc.])
     AC_MSG_RESULT([-ljemalloc])
-elif test "$ac_mtd_malloc" = mimalloc; then
-    MALLOC_LIBS="-lmimalloc"
-    AC_DEFINE([HAVE_MIMALLOC], [1], [Define if you are using libmimalloc for malloc.])
-    AC_MSG_RESULT([-lmimalloc])
 elif test "$ac_mtd_malloc" = flow; then
     MALLOC_LIBS="-lflow"
     AC_DEFINE([HAVE_FLOW_MALLOC], [1], [Define if you are using libflow for malloc.])
@@ -310,7 +294,6 @@ AC_CHECK_DECLS([clock_gettime], [], [], [#if HAVE_TIME_H
 #endif])
 AC_SEARCH_LIBS([clock_gettime], [rt])
 AC_CHECK_FUNCS([clock_gettime])
-AC_SEARCH_LIBS([backtrace], [execinfo])
 
 
 AC_ARG_ENABLE([row-type],
