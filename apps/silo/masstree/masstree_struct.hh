@@ -1,7 +1,7 @@
 /* Masstree
  * Eddie Kohler, Yandong Mao, Robert Morris
- * Copyright (c) 2012-2014 President and Fellows of Harvard College
- * Copyright (c) 2012-2014 Massachusetts Institute of Technology
+ * Copyright (c) 2012-2016 President and Fellows of Harvard College
+ * Copyright (c) 2012-2016 Massachusetts Institute of Technology
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,9 +24,10 @@ namespace Masstree {
 
 template <typename P>
 struct make_nodeversion {
+    typedef nodeversion_parameters<typename P::nodeversion_value_type> parameters_type;
     typedef typename mass::conditional<P::concurrent,
-                                       nodeversion,
-                                       singlethreaded_nodeversion>::type type;
+                                       nodeversion<parameters_type>,
+                                       singlethreaded_nodeversion<parameters_type> >::type type;
 };
 
 template <typename P>
@@ -55,13 +56,6 @@ class node_base : public make_nodeversion<P>::type {
         : nodeversion_type(isleaf) {
     }
 
-    int size() const {
-        if (this->isleaf())
-            return static_cast<const leaf_type*>(this)->size();
-        else
-            return static_cast<const internode_type*>(this)->size();
-    }
-
     inline base_type* parent() const {
         // almost always an internode
         if (this->isleaf())
@@ -69,12 +63,8 @@ class node_base : public make_nodeversion<P>::type {
         else
             return static_cast<const internode_type*>(this)->parent_;
     }
-    static inline base_type* parent_for_layer_root(base_type* higher_layer) {
-        (void) higher_layer;
-        return 0;
-    }
-    static inline bool parent_exists(base_type* p) {
-        return p != 0;
+    inline bool parent_exists(base_type* p) const {
+        return p != nullptr;
     }
     inline bool has_parent() const {
         return parent_exists(parent());
@@ -86,19 +76,13 @@ class node_base : public make_nodeversion<P>::type {
         else
             static_cast<internode_type*>(this)->parent_ = p;
     }
-    inline base_type* unsplit_ancestor() const {
-        base_type* x = const_cast<base_type*>(this), *p;
-        while (x->has_split() && (p = x->parent()))
-            x = p;
-        return x;
+    inline void make_layer_root() {
+        set_parent(nullptr);
+        this->mark_root();
     }
-    inline leaf_type* leftmost() const {
-        base_type* x = unsplit_ancestor();
-        while (!x->isleaf()) {
-            internode_type* in = static_cast<internode_type*>(x);
-            x = in->child_[0];
-        }
-        return x;
+    inline base_type* maybe_parent() const {
+        base_type* x = parent();
+        return parent_exists(x) ? x : const_cast<base_type*>(this);
     }
 
     inline leaf_type* reach_leaf(const key_type& k, nodeversion_type& version,
@@ -109,7 +93,7 @@ class node_base : public make_nodeversion<P>::type {
             ::prefetch((const char *) this + i);
     }
 
-    void print(FILE* f, const char* prefix, int indent, int kdepth);
+    void print(FILE* f, const char* prefix, int depth, int kdepth) const;
 };
 
 template <typename P>
@@ -123,19 +107,20 @@ class internode : public node_base<P> {
     typedef typename P::threadinfo_type threadinfo;
 
     uint8_t nkeys_;
+    uint32_t height_;
     ikey_type ikey0_[width];
     node_base<P>* child_[width + 1];
     node_base<P>* parent_;
     kvtimestamp_t created_at_[P::debug_level > 0];
 
-    internode()
-        : node_base<P>(false), nkeys_(0), parent_() {
+    internode(uint32_t height)
+        : node_base<P>(false), nkeys_(0), height_(height), parent_() {
     }
 
-    static internode<P>* make(threadinfo& ti) {
+    static internode<P>* make(uint32_t height, threadinfo& ti) {
         void* ptr = ti.pool_allocate(sizeof(internode<P>),
                                      memtag_masstree_internode);
-        internode<P>* n = new(ptr) internode<P>;
+        internode<P>* n = new(ptr) internode<P>(height);
         assert(n);
         if (P::debug_level > 0)
             n->created_at_[0] = ti.operation_timestamp();
@@ -166,7 +151,7 @@ class internode : public node_base<P> {
             ::prefetch((const char *) this + i);
     }
 
-    void print(FILE* f, const char* prefix, int indent, int kdepth);
+    void print(FILE* f, const char* prefix, int depth, int kdepth) const;
 
     void deallocate(threadinfo& ti) {
         ti.pool_deallocate(this, sizeof(*this), memtag_masstree_internode);
@@ -272,6 +257,7 @@ class leaf : public node_base<P> {
     typedef typename P::threadinfo_type threadinfo;
     typedef stringbag<uint8_t> internal_ksuf_type;
     typedef stringbag<uint16_t> external_ksuf_type;
+    typedef typename P::phantom_epoch_type phantom_epoch_type;
     static constexpr int ksuf_keylenx = 64;
     static constexpr int layer_keylenx = 128;
 
@@ -292,34 +278,39 @@ class leaf : public node_base<P> {
     } next_;
     leaf<P>* prev_;
     node_base<P>* parent_;
-    kvtimestamp_t node_ts_;
+    phantom_epoch_type phantom_epoch_[P::need_phantom_epoch];
     kvtimestamp_t created_at_[P::debug_level > 0];
     internal_ksuf_type iksuf_[0];
 
-    leaf(size_t sz, kvtimestamp_t node_ts)
+    leaf(size_t sz, phantom_epoch_type phantom_epoch)
         : node_base<P>(true), modstate_(modstate_insert),
           permutation_(permuter_type::make_empty()),
-          ksuf_(), parent_(), node_ts_(node_ts), iksuf_{} {
+          ksuf_(), parent_(), iksuf_{} {
         masstree_precondition(sz % 64 == 0 && sz / 64 < 128);
         extrasize64_ = (int(sz) >> 6) - ((int(sizeof(*this)) + 63) >> 6);
-        if (extrasize64_ > 0)
-            new((void *)&iksuf_[0]) internal_ksuf_type(width, sz - sizeof(*this));
+        if (extrasize64_ > 0) {
+            new((void*) &iksuf_[0]) internal_ksuf_type(width, sz - sizeof(*this));
+        }
+        if (P::need_phantom_epoch) {
+            phantom_epoch_[0] = phantom_epoch;
+        }
     }
 
-    static leaf<P>* make(int ksufsize, kvtimestamp_t node_ts, threadinfo& ti) {
+    static leaf<P>* make(int ksufsize, phantom_epoch_type phantom_epoch, threadinfo& ti) {
         size_t sz = iceil(sizeof(leaf<P>) + std::min(ksufsize, 128), 64);
         void* ptr = ti.pool_allocate(sz, memtag_masstree_leaf);
-        leaf<P>* n = new(ptr) leaf<P>(sz, node_ts);
+        leaf<P>* n = new(ptr) leaf<P>(sz, phantom_epoch);
         assert(n);
-        if (P::debug_level > 0)
+        if (P::debug_level > 0) {
             n->created_at_[0] = ti.operation_timestamp();
+        }
         return n;
     }
     static leaf<P>* make_root(int ksufsize, leaf<P>* parent, threadinfo& ti) {
-        leaf<P>* n = make(ksufsize, parent ? parent->node_ts_ : 0, ti);
+        leaf<P>* n = make(ksufsize, parent ? parent->phantom_epoch() : phantom_epoch_type(), ti);
         n->next_.ptr = n->prev_ = 0;
-        n->parent_ = node_base<P>::parent_for_layer_root(parent);
-        n->mark_root();
+        n->ikey0_[0] = 0; // to avoid undefined behavior
+        n->make_layer_root();
         return n;
     }
 
@@ -330,6 +321,10 @@ class leaf : public node_base<P> {
         int es = (extrasize64_ >= 0 ? extrasize64_ : -extrasize64_ - 1);
         return (sizeof(*this) + es * 64 + 63) & ~size_t(63);
     }
+    phantom_epoch_type phantom_epoch() const {
+        return P::need_phantom_epoch ? phantom_epoch_[0] : phantom_epoch_type();
+    }
+
     int size() const {
         return permuter_type::size(permutation_);
     }
@@ -343,10 +338,13 @@ class leaf : public node_base<P> {
     typename nodeversion_type::value_type full_unlocked_version_value() const {
         static_assert(int(nodeversion_type::traits_type::top_stable_bits) >= int(permuter_type::size_bits), "not enough bits to add size to version");
         typename node_base<P>::nodeversion_type v(*this);
-        if (v.locked())
-            // subtlely, unlocked_version_value() is different than v.unlock(); v.version_value() because the latter will add a
-            // split bit if we're doing a split. So we do the latter to get the fully correct version.
+        if (v.locked()) {
+            // subtly, unlocked_version_value() is different than v.unlock();
+            // v.version_value() because the latter will add a split bit if
+            // we're doing a split. So we do the latter to get the fully
+            // correct version.
             v.unlock();
+        }
         return (v.version_value() << permuter_type::size_bits) + size();
     }
 
@@ -392,6 +390,7 @@ class leaf : public node_base<P> {
         return keylenx_has_ksuf(keylenx_[p]);
     }
     Str ksuf(int p, int keylenx) const {
+        (void) keylenx;
         masstree_precondition(keylenx_has_ksuf(keylenx));
         return ksuf_ ? ksuf_->get(p) : iksuf_[0].get(p);
     }
@@ -469,7 +468,7 @@ class leaf : public node_base<P> {
         }
     }
 
-    void print(FILE* f, const char* prefix, int indent, int kdepth);
+    void print(FILE* f, const char* prefix, int depth, int kdepth) const;
 
     leaf<P>* safe_next() const {
         return reinterpret_cast<leaf<P>*>(next_.x & ~(uintptr_t) 1);
@@ -498,9 +497,9 @@ class leaf : public node_base<P> {
     inline void assign(int p, const key_type& ka, threadinfo& ti) {
         lv_[p] = leafvalue_type::make_empty();
         ikey0_[p] = ka.ikey();
-        if (!ka.has_suffix())
+        if (!ka.has_suffix()) {
             keylenx_[p] = ka.length();
-        else {
+        } else {
             keylenx_[p] = ksuf_keylenx;
             assign_ksuf(p, ka.suffix(), false, ti);
         }
@@ -508,9 +507,9 @@ class leaf : public node_base<P> {
     inline void assign_initialize(int p, const key_type& ka, threadinfo& ti) {
         lv_[p] = leafvalue_type::make_empty();
         ikey0_[p] = ka.ikey();
-        if (!ka.has_suffix())
+        if (!ka.has_suffix()) {
             keylenx_[p] = ka.length();
-        else {
+        } else {
             keylenx_[p] = ksuf_keylenx;
             assign_ksuf(p, ka.suffix(), true, ti);
         }
@@ -519,8 +518,9 @@ class leaf : public node_base<P> {
         lv_[p] = x->lv_[xp];
         ikey0_[p] = x->ikey0_[xp];
         keylenx_[p] = x->keylenx_[xp];
-        if (x->has_ksuf(xp))
+        if (x->has_ksuf(xp)) {
             assign_ksuf(p, x->ksuf(xp), true, ti);
+        }
     }
     inline void assign_initialize_for_layer(int p, const key_type& ka) {
         assert(ka.has_suffix());
@@ -530,8 +530,8 @@ class leaf : public node_base<P> {
     void assign_ksuf(int p, Str s, bool initializing, threadinfo& ti);
 
     inline ikey_type ikey_after_insert(const permuter_type& perm, int i,
-                                       const key_type& ka, int ka_i) const;
-    int split_into(leaf<P>* nr, int p, const key_type& ka, ikey_type& split_ikey,
+                                       const tcursor<P>* cursor) const;
+    int split_into(leaf<P>* nr, tcursor<P>* tcursor, ikey_type& split_ikey,
                    threadinfo& ti);
 
     template <typename PP> friend class tcursor;
@@ -553,10 +553,11 @@ internode<P>* node_base<P>::locked_parent(threadinfo& ti) const
 {
     node_base<P>* p;
     masstree_precondition(!this->concurrent || this->locked());
-    while (1) {
+    while (true) {
         p = this->parent();
-        if (!node_base<P>::parent_exists(p))
+        if (!this->parent_exists(p)) {
             break;
+        }
         nodeversion_type pv = p->lock(*p, ti.lock_fence(tc_internode_lock));
         if (p == this->parent()) {
             masstree_invariant(!p->isleaf());
@@ -569,6 +570,16 @@ internode<P>* node_base<P>::locked_parent(threadinfo& ti) const
 }
 
 
+template <typename P>
+void node_base<P>::print(FILE* f, const char* prefix, int depth, int kdepth) const
+{
+    if (this->isleaf())
+        static_cast<const leaf<P>*>(this)->print(f, prefix, depth, kdepth);
+    else
+        static_cast<const internode<P>*>(this)->print(f, prefix, depth, kdepth);
+}
+
+
 /** @brief Return the result of compare_key(k, LAST KEY IN NODE).
 
     Reruns the comparison until a stable comparison is obtained. */
@@ -577,10 +588,12 @@ inline int
 internode<P>::stable_last_key_compare(const key_type& k, nodeversion_type v,
                                       threadinfo& ti) const
 {
-    while (1) {
-        int cmp = compare_key(k, size() - 1);
-        if (likely(!this->has_changed(v)))
+    while (true) {
+        int n = this->size();
+        int cmp = n ? compare_key(k, n - 1) : 1;
+        if (likely(!this->has_changed(v))) {
             return cmp;
+        }
         v = this->stable_annotated(ti.stable_fence());
     }
 }
@@ -590,12 +603,24 @@ inline int
 leaf<P>::stable_last_key_compare(const key_type& k, nodeversion_type v,
                                  threadinfo& ti) const
 {
-    while (1) {
+    while (true) {
         typename leaf<P>::permuter_type perm(permutation_);
-        int p = perm[perm.size() - 1];
+        int n = perm.size();
+        // If `n == 0`, then this node is empty: it was deleted without ever
+        // splitting, or it split and then was emptied.
+        // - It is always safe to return 1, because then the caller will
+        //   check more precisely whether `k` belongs in `this`.
+        // - It is safe to return anything if `this->deleted()`, because
+        //   viewing the deleted node will always cause a retry.
+        // - Thus it is safe to return a comparison with the key stored in slot
+        //   `perm[0]`. If the node ever had keys in it, then kpermuter ensures
+        //   that slot holds the most recently deleted key, which would belong
+        //   in this leaf. Otherwise, `perm[0]` is 0.
+        int p = perm[n ? n - 1 : 0];
         int cmp = compare_key(k, p);
-        if (likely(!this->has_changed(v)))
+        if (likely(!this->has_changed(v))) {
             return cmp;
+        }
         v = this->stable_annotated(ti.stable_fence());
     }
 }
@@ -611,45 +636,48 @@ inline leaf<P>* node_base<P>::reach_leaf(const key_type& ka,
 {
     const node_base<P> *n[2];
     typename node_base<P>::nodeversion_type v[2];
-    bool sense;
+    unsigned sense;
 
     // Get a non-stale root.
     // Detect staleness by checking whether n has ever split.
     // The true root has never split.
  retry:
-    sense = false;
+    sense = 0;
     n[sense] = this;
-    while (1) {
+    while (true) {
         v[sense] = n[sense]->stable_annotated(ti.stable_fence());
-        if (!v[sense].has_split())
+        if (v[sense].is_root()) {
             break;
+        }
         ti.mark(tc_root_retry);
-        n[sense] = n[sense]->unsplit_ancestor();
+        n[sense] = n[sense]->maybe_parent();
     }
 
     // Loop over internal nodes.
     while (!v[sense].isleaf()) {
-        const internode<P> *in = static_cast<const internode<P> *>(n[sense]);
+        const internode<P> *in = static_cast<const internode<P>*>(n[sense]);
         in->prefetch();
         int kp = internode<P>::bound_type::upper(ka, *in);
-        n[!sense] = in->child_[kp];
-        if (!n[!sense])
+        n[sense ^ 1] = in->child_[kp];
+        if (!n[sense ^ 1]) {
             goto retry;
-        v[!sense] = n[!sense]->stable_annotated(ti.stable_fence());
+        }
+        v[sense ^ 1] = n[sense ^ 1]->stable_annotated(ti.stable_fence());
 
         if (likely(!in->has_changed(v[sense]))) {
-            sense = !sense;
+            sense ^= 1;
             continue;
         }
 
         typename node_base<P>::nodeversion_type oldv = v[sense];
         v[sense] = in->stable_annotated(ti.stable_fence());
-        if (oldv.has_split(v[sense])
+        if (unlikely(oldv.has_split(v[sense]))
             && in->stable_last_key_compare(ka, v[sense], ti) > 0) {
             ti.mark(tc_root_retry);
             goto retry;
-        } else
+        } else {
             ti.mark(tc_internode_retry);
+        }
     }
 
     version = v[sense];
@@ -669,11 +697,12 @@ leaf<P>* leaf<P>::advance_to_key(const key_type& ka, nodeversion_type& v,
     const leaf<P>* n = this;
     nodeversion_type oldv = v;
     v = n->stable_annotated(ti.stable_fence());
-    if (v.has_split(oldv)
+    if (unlikely(v.has_split(oldv))
         && n->stable_last_key_compare(ka, v, ti) > 0) {
         leaf<P> *next;
         ti.mark(tc_leaf_walk);
-        while (likely(!v.deleted()) && (next = n->safe_next())
+        while (likely(!v.deleted())
+               && (next = n->safe_next())
                && compare(ka.ikey(), next->ikey_bound()) >= 0) {
             n = next;
             v = n->stable_annotated(ti.stable_fence());
@@ -761,9 +790,9 @@ inline node_base<P>* basic_table<P>::root() const {
 template <typename P>
 inline node_base<P>* basic_table<P>::fix_root() {
     node_base<P>* root = root_;
-    if (unlikely(root->has_split())) {
+    if (unlikely(!root->is_root())) {
         node_base<P>* old_root = root;
-        root = root->unsplit_ancestor();
+        root = root->maybe_parent();
         (void) cmpxchg(&root_, old_root, root);
     }
     return root;

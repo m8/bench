@@ -14,7 +14,7 @@
  * is legally binding.
  */
 #ifndef MASSTREE_GET_HH
-#define MASSTREE_GET_HH 1
+#define MASSTREE_GET_HH
 #include "masstree_tcursor.hh"
 #include "masstree_key.hh"
 namespace Masstree {
@@ -89,7 +89,7 @@ bool tcursor<P>::find_locked(threadinfo& ti)
         leafvalue<P> lv = n_->lv_[kx_.p];
         lv.prefetch(n_->keylenx_[kx_.p]);
         state_ = n_->ksuf_matches(kx_.p, ka_);
-        if (state_ < 0 && !n_->has_changed(v) && !lv.layer()->has_split()) {
+        if (state_ < 0 && !n_->has_changed(v) && lv.layer()->is_root()) {
             ka_.shift_by(-state_);
             root = lv.layer();
             goto retry;
@@ -105,12 +105,13 @@ bool tcursor<P>::find_locked(threadinfo& ti)
         goto forward;
     } else if (unlikely(state_ < 0)) {
         ka_.shift_by(-state_);
-        n_->lv_[kx_.p] = root = n_->lv_[kx_.p].layer()->unsplit_ancestor();
+        n_->lv_[kx_.p] = root = n_->lv_[kx_.p].layer()->maybe_parent();
         n_->unlock();
         goto retry;
     } else if (unlikely(n_->deleted_layer())) {
         ka_.unshift_all();
         root = const_cast<node_base<P>*>(root_);
+        n_->unlock();
         goto retry;
     }
     return state_;

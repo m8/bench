@@ -1,6 +1,6 @@
 % -*- tex-command: "pdflatex" -*-
 \documentclass[11pt]{article}
-\usepackage{times,mathptmx,amsmath,amssymb,graphicx,float}
+\usepackage{times,mathptmx,amsmath,amssymb,graphicx,float,titling}
 \usepackage[tmargin=1in,hmargin=.75in,height=9in,columnsep=2pc,letterpaper]{geometry}
 \usepackage[T1]{fontenc}
 \makeatletter
@@ -63,7 +63,18 @@
 \gdef\_{\char`\_}
 \frenchspacing
 \makeatother
+\pretitle{\begin{raggedleft}\LARGE\fontseries{bx}\selectfont}
+\posttitle{\end{raggedleft}}
+\title{Masstree specification}
+\date{}
 \begin{document}
+
+\maketitle
+
+\section*{Note}
+
+As of 2019, this specification is not fully up to date relative to the
+Masstree code, particularly around remove. The code is more correct.
 
 \section{Definitions}
 
@@ -161,7 +172,7 @@ satisfied.
 Here's a picture of a Masstree layer.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{examples_1}
+\includegraphics[scale=.8]{examples-1}
 \caption{Example Masstree layer.}
 \end{figure}
 
@@ -411,9 +422,9 @@ contain fences.
 \textbf{unlock}(node $n$): \C{precondition: \(n\) is locked} \\
 \> $v \gets n.\V{version}$ \\
 \> if $v.\V{inserting}$: \\
-\>\> $++v.\V{vinsert}$ \C{may overflow into \V{vsplit}} \\
+\>\> $v.\V{vinsert} \gets v.\V{vinsert} + 1$ \C{may overflow into \V{vsplit}} \\
 \> else if $v.\V{splitting}$: \\
-\>\> $++v.\V{vsplit}$;~ $v.\V{isroot} \gets 0$ \C{the true root has never split} \\
+\>\> $v.\V{vsplit} \gets v.\V{vsplit} + 1$;~ $v.\V{isroot} \gets 0$ \C{the true root has never split} \\
 \> $v.\{\V{locked},\V{inserting},\V{splitting}\} \gets 0$ \\
 \> \releasefence \\
 \> $n.\V{version} \gets v$
@@ -619,7 +630,7 @@ if $v.\V{isleaf}$: \\
 \>\> $\pi \gets \V{perm}.\V{pos}[i]$ \\
 \>\> if $n.\V{kslice}[\pi] < k.\V{slice}$ or ($n.\V{kslice}[\pi] =
 k.\V{slice}$ and $n.\V{klength}[\pi] < \V{klength}$): \\
-\>\>\> $++i$ \\
+\>\>\> $i \gets i + 1$ \\
 \>\> else if $n.\V{kslice}[\pi] = k.\V{slice}$ and $n.\V{klength}[\pi] =
 \V{klength}$: \\
 \>\>\> return $\langle i, \pi \rangle$ \\
@@ -682,7 +693,7 @@ full lower-layer tree (linked from a higher layer, which we display
 above the dashed line):
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{insert1_1}
+\includegraphics[scale=.8]{insert1-1}
 \end{figure}
 
 \noindent%
@@ -690,37 +701,40 @@ Inserting a new item into this lower layer will cause a split. A new
 leaf node is created,
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{insert1_2}
+\includegraphics[scale=.8]{insert1-2}
 \end{figure}
 
 \noindent%
 then a new internal node
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{insert1_3}
+\includegraphics[scale=.8]{insert1-3}
 \end{figure}
 
 \noindent%
 and finally a new root.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{insert1_4}
+\includegraphics[scale=.8]{insert1-4}
 \end{figure}
 
 \noindent%
 But the higher layer connects to the \emph{old} root, not the new root.
-Correcting this would more work: modifications to the higher layer
-require locking the higher-layer node. We choose to delay that work.
+Correcting this requires more work, since a modification to the higher layer
+requires locking the higher-layer node. We choose to delay that work.
 There's no \emph{correctness} problem with leaving the tree this
 way---thanks to the root reachability invariant, the new root will be
 found by traversing parent pointers from the old. So we leave the tree
 this way until the next put or remove, which will retarget the higher
-layer's pointer.
+layer's pointer:
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{insert1_5}
+\includegraphics[scale=.8]{insert1-5}
 \end{figure}
 
+A Masstree layer can contain leaf nodes at different heights. Each interior
+node tracks its height, however, and the split procedure inserts missing
+interior nodes as required to maintain overall balance.
 
 \begin{figure}[H]
 \begin{programtabbing}
@@ -845,36 +859,43 @@ n.\V{value}[\pi]\) \\
 \> assign \(n.\V{permutation}\) to contain only those keys not copied to
 \(n'\) \\
 \> insert \(k\) and \V{value} into \(n\) or \(n'\) as appropriate \\
+\> \(\V{height} \gets 1\) \\
 ascend:~
 \> $p \gets \text{locked\_parent}(n)$ \C{hand-over-hand locking} \\
-\> if $p = \NIL$: \C{$n$ was old root} \\
-\>\> \(p \gets \text{new interior node}\) \\
-\>\> insert \(n\), \(n'\) into \(p\) \\
-\>\> \(p.\V{isroot} \gets 1\);~ \(p.\V{parent} \gets \NIL\) \\
-\>\> \(n'.\V{parent} \gets p\) \\
-\>\> \fence \\
-\>\> \(n.\V{parent} \gets p\) \\
-\>\> unlock($n$);~ unlock($n'$);~ return \\
-\> else if $p$ is not full: \\
+\> if $p \neq \NIL$: \\
 \>\> $p.\V{version}.\V{inserting} \gets 1$ \\
 \>\> \fence \\
+\> if $p = \NIL$ or $p.\V{height} > \V{height}$: \C{add new root or rectify imbalance} \\
+\>\> \(p' \gets \text{new interior node}\);~
+\(p'.\V{height} \gets \V{height}\);~ $p'.\V{isroot} \gets (p = \NIL)$ \\
+\>\> insert \(n\), \(n'\) into \(p'\) \\
+\>\> if $p \neq \NIL$: \\
+\>\>\> \(i \gets \text{index of $n$ in children of $p$}\) \\
+\>\>\> \(p.\V{child}[i] \gets p'\);~ \(p'.\V{parent} \gets p\) \\
+\>\> \(n'.\V{parent} \gets p'\) \\
+\>\> \fence \\
+\>\> \(n.\V{parent} \gets p'\) \\
+\>\> unlock($n$);~ unlock($n'$);~ if $p\neq\NIL$ then unlock($p$);~ return \\
+\> else if $p$ is not full: \\
 \>\> \(\N{unlock}(n)\) \\
 \>\> shift $p$ keys and children to include $n'$ \\
 \>\> \(n'.\V{parent} \gets p\) \\
 \>\> \fence \\
-\>\> \(++p.\V{size}\) \\
+\>\> \(p.\V{size} \gets p.\V{size} + 1\) \\
 \>\> unlock($n$);~ unlock($n'$);~ unlock($p$);~ return \\
 \> else: \\
 \>\> \(p.\V{version}.\V{splitting} \gets 1\) \\
 \>\> \fence \\
 \>\> \(\N{unlock}(n)\) \\
-\>\> \(p' \gets \text{new interior node}\) \\
-\>\> \(p'.\V{version} \gets p.\V{version}\) \\
+\>\> \(p' \gets \text{new interior node}\);~
+\(p'.\V{version} \gets p.\V{version}\);~ \(p'.\V{height} \gets \V{height}\) \\
 \>\> \fence \\
 \>\> move larger keys from \(p\) into \(p'\), inserting \(n'\) where it belongs  (and setting \(n'.\V{parent}\)) \\
 \>\> for all \(c \in \text{children of \(p'\)}\): \\
 \>\>\> \(c.\V{parent} \gets p'\) \\
-\>\> unlock($n'$);~ $n \gets p$;~ $n' \gets p'$;~ goto ascend
+\>\> unlock($n'$);~ $n \gets p$;~ $n' \gets p'$;~
+\(\V{height} \gets \V{height} + 1\) \\
+\>\>  goto ascend
 \end{programtabbing}
 \caption{Split a leaf and insert a key.}
 \label{fig:nsplit}
@@ -907,7 +928,7 @@ the wide range of tree changes it can cause.
 We start with a simple example tree.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_1}
+\includegraphics[scale=.8]{remove1-1}
 \end{figure}
 
 Removing a single item---say, \ITEM{e}---is relatively simple: all code
@@ -916,7 +937,7 @@ is in two short functions, \N{remove} and \N{remove\_item}. We first use
 the item out of the relevant leaf's permutation.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_2}
+\includegraphics[scale=.8]{remove1-2}
 \end{figure}
 
 \noindent
@@ -991,7 +1012,7 @@ below. This lock protects both \(\ITEM{def}.\V{next}\) and
 list until \ITEM{def} is unlinked.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_3}
+\includegraphics[scale=.8]{remove1-3}
 \end{figure}
 
 \noindent%
@@ -1001,7 +1022,7 @@ modification requires a retry loop, in case \ITEM{abc} splits or is
 removed during the operation.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_31}
+\includegraphics[scale=.8]{remove1-31}
 \end{figure}
 
 \noindent%
@@ -1009,7 +1030,7 @@ With \(\ITEM{def}.\V{prev}.\V{next}\) and \(\ITEM{def}.\V{next}\) both
 locked, the unlink is easy. First, \(\ITEM{ghi}.\V{prev}\) is modified,
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_4}
+\includegraphics[scale=.8]{remove1-4}
 \end{figure}
 
 \noindent%
@@ -1017,7 +1038,7 @@ and then, after a fence, \(\ITEM{abc}.\V{next}\). A single assignment
 both unlocks and changes the pointer.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_5}
+\includegraphics[scale=.8]{remove1-5}
 \end{figure}
 
 \noindent%
@@ -1034,7 +1055,7 @@ leaf's \N{lowkey} (here, \(\N{lowkey}(\ITEM{def}) = \ITEM{d}\)), and removes
 the corresponding key and child pointer, creating this state.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_6}
+\includegraphics[scale=.8]{remove1-6}
 \end{figure}
 
 And this completes the removal of \ITEM{def}.
@@ -1044,7 +1065,7 @@ And this completes the removal of \ITEM{def}.
 Now say \ITEM{ghi} is deleted. This process starts out as before.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_7}
+\includegraphics[scale=.8]{remove1-7}
 \end{figure}
 
 \noindent%
@@ -1054,7 +1075,7 @@ no keys and only one child. Trivial interior nodes are redundant,
 wasting space and traversal time.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_8}
+\includegraphics[scale=.8]{remove1-8}
 \end{figure}
 
 Masstree detects trivial nodes and deletes them in the \N{collapse}
@@ -1064,7 +1085,7 @@ hand-over-hand locking, and adjusts parent nodes' pointers to hop over
 the deleted trivial node.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove1_9}
+\includegraphics[scale=.8]{remove1-9}
 \end{figure}
 
 \noindent%
@@ -1080,7 +1101,7 @@ root requires more work to fix, as we'll see.
 We return to the original example and, this time, remove leaf \ITEM{jkl}.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_1}
+\includegraphics[scale=.8]{remove2-1}
 \end{figure}
 
 Now, \ITEM{jkl} is the \emph{first} child of its parent. This requires
@@ -1088,7 +1109,7 @@ special handling. To see why, note that
 the usual removal procedure would create this state:
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_2}
+\includegraphics[scale=.8]{remove2-2}
 \end{figure}
 
 \noindent%
@@ -1097,16 +1118,15 @@ reach leaf \ITEM{ghi}, which has inherited responsibility for
 the \ITEM{jkl} range. But the \Bplus\ tree structure will direct the
 \N{put} to leaf \ITEM{mno}!
 
-Although such mistakes might be detectable at the leaves
-using \N{lowkey} comparisons, we prefer to avoid the problem
-in a different way. When
-a subtree's leftmost leaf is deleted, Masstree detects the issue and
-switches to a special \N{reshape} procedure. This procedure first sets
-the subtree's leftmost child pointer to \(\NIL\), causing concurrent
-gets and puts that would hit that node to retry from the root.
+This mistake could be avoided if all leaf accesses examined the \N{lowkey}, but
+we fix the misdirection. When a subtree's leftmost
+leaf is deleted, Masstree detects the issue and executes a
+\N{redirect} procedure. This procedure first sets the subtree's leftmost child
+pointer to \(\NIL\), causing concurrent gets and puts that would hit that node
+to retry from the root.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_3}
+\includegraphics[scale=.8]{remove2-3}
 \end{figure}
 
 The procedure then works up the tree using hand-over-hand locking. At
@@ -1115,13 +1135,14 @@ logical successor, here \ITEM{m}. In this tree, that takes one step, but
 more complicated trees might require multiple replacements.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_4}
+\includegraphics[scale=.8]{remove2-4}
 \end{figure}
 
-This tree is valid and sends no puts down the wrong path. Although an
-interior node has a redundant key---the right-hand interior node
-contains key \ITEM{m}, although it is responsible for no keys less
-than \ITEM{m}---we don't bother to clean it up yet.
+This tree is valid and sends no puts down the wrong path. Although an interior
+node has a redundant key---the right-hand interior node contains key \ITEM{m},
+although it is responsible for no keys less than \ITEM{m}---we don't bother to
+clean it up. (We could clean it up by marked all interior nodes as
+\V{vsplitting} in the redirect procedure.)
 
 \subsection{Root trimming}
 
@@ -1129,7 +1150,7 @@ When the \ITEM{mno} leaf is deleted,
 the entire right-hand subtree becomes redundant.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_5}
+\includegraphics[scale=.8]{remove2-5}
 \end{figure}
 
 After removing the \ITEM{mno} reference, \N{remove\_leaf} can tell that
@@ -1137,7 +1158,7 @@ the right-hand interior node is redundant: its single child pointer is
 \NIL. The interior node can therefore be deleted
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_6}
+\includegraphics[scale=.8]{remove2-6}
 \end{figure}
 
 \noindent%
@@ -1145,7 +1166,7 @@ and this continues
 up the tree.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_7}
+\includegraphics[scale=.8]{remove2-7}
 \end{figure}
 
 \noindent%
@@ -1154,7 +1175,7 @@ can we fix this? The root node may be referenced by
 a leaf node in a higher \emph{tree layer}, as shown here:
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_8}
+\includegraphics[scale=.8]{remove2-8}
 \end{figure}
 
 \noindent%
@@ -1168,14 +1189,14 @@ called \N{gclayer}. This function locks the
 relevant leaf in the higher layer
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_9}
+\includegraphics[scale=.8]{remove2-9}
 \end{figure}
 
 \noindent%
 locks the lower layer's root
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_11}
+\includegraphics[scale=.8]{remove2-11}
 \end{figure}
 
 \noindent%
@@ -1183,7 +1204,7 @@ and then marks its single child as the new root, switching the higher
 layer's value pointer to it.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_12}
+\includegraphics[scale=.8]{remove2-12}
 \end{figure}
 
 The original root is now garbage and can be reclaimed.
@@ -1201,14 +1222,14 @@ entire layer. This starts out like any gclayer call: the relevant leaf
 in the higher layer is locked
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_15}
+\includegraphics[scale=.8]{remove2-15}
 \end{figure}
 
 \noindent
 and so is the empty root in the lower layer.
 
 \begin{figure}[H]
-\includegraphics[scale=.8]{remove2_16}
+\includegraphics[scale=.8]{remove2-16}
 \end{figure}
 
 \noindent%
@@ -1260,22 +1281,24 @@ a deleted layer, writers retry from the layer-0 root.
 \>\> return \\
 \> \(n.\V{version}.\V{deleted} \gets 1\);~ fork \(\N{free\_node}(n)\) \\
 \> \(\N{unlink\_leaf}(n)\) \\
-\> \(k \gets \N{lowkey}(n)\) \\
+\> \(k \gets \N{lowkey}(n)\);~ \(r \gets \NIL\) \\
 ascend:~
-\> \(p \gets \N{locked\_parent}(n)\);~ \(\N{unlock}(n)\) \\
+\> \(p \gets \N{locked\_parent}(n)\);~ \(p.\V{version}.\V{inserting} \gets 1\) \\
+\> \fence \\
 \> \(i \gets \text{position of \V{k} in \V{p}}\) \\
-\> if \(i \neq 0\): \\
-\>\> \(p.\V{version}.\V{inserting} \gets 1\) \\
-\>\> \fence \\
+\> \(p.\V{child}[i] \gets r\) \\
+\> if \(r \neq \NIL\): \\
+\>\> \(r.\V{parent} \gets p\) \\
+\> else if \(i > 0\): \\
 \>\> remove the element at index \(i - 1\), shifting others down \\
-\>\> if \(i \neq 1\) or \(p.\V{child}[0] \neq \NIL\): \\
-\>\>\> \(\N{collapse}(p, k, \V{toproot}, \V{layerkey})\) \\
-\>\>\> return \\
-\> if \(p.\V{size} = 0\): \\
-\>\> \(p.\V{version}.\V{deleted} \gets 1\);~ fork \(\N{free\_node}(p)\) \\
-\> else: \\
-\>\> \(\N{reshape}(p, k, \V{toproot}, \V{layerkey})\) \\
-\>\> return \\
+\> if \(i \leq 1\) and \(p.\V{nkeys} > 0\) and \(p.\V{child}[0] = \NIL\): \\
+\>\> \(\N{redirect}(p, \V{k}, p.\V{kslice}[0])\) \\
+\>\> \(\V{k} \gets p.\V{kslice}[0]\)\\
+\> \(\N{unlock}(n)\) \\
+\> if \(p.\V{isroot}\) or \(p.\V{size} > 0\): \\
+\>\> \(\N{unlock}(p)\);~ return \\
+\> \(p.\V{version}.\V{deleted} \gets 1\);~ fork \(\N{free\_node}(p)\) \\
+\> \(r \gets p.\V{child}[p.\V{size}]\);~ \(p.\V{child}[p.\V{size}] \gets \NIL\) \\
 \> \(n \gets p\);~ goto ascend
 \end{programtabbing}
 \caption{Remove a node.}
@@ -1300,40 +1323,19 @@ ascend:~
 
 \begin{figure}[H]
 \begin{programtabbing}
-\textbf{reshape}(interiornode \(n\), key \V{k}, node \V{toproot}, key \V{layerkey}): \\
-\> \(n.\V{child}[0] \gets \NIL\) \\
-\> \(\V{patchkey} \gets n.\V{kslice}[0]\) \\
- ascend:~
-\> \(p \gets \N{locked\_parent}(n)\);~ \(\N{unlock}(n)\) \\
-\> \(i \gets \text{position of \V{k} in \V{p}}\) \\
-\> if \(i \neq 0\): \\
-\>\> \(p.\V{version}.\V{inserting} \gets 1\) \\
-\>\> \fence \\
-\>\> \(p.\V{kslice}[i - 1] \gets \V{patchkey}\) \\
-\>\> if \(i \neq 1\) or \(p.\V{child}[0] \neq \NIL\): \\
-\>\>\> \(\N{collapse}(p, k, \V{toproot}, \V{layerkey})\) \\
-\>\>\> return \\
-\> \(n \gets p\);~ goto ascend
-\end{programtabbing}
-\end{figure}
-
-\begin{figure}[H]
-\begin{programtabbing}
-\textbf{collapse}(interiornode \(n\), key \(k\), node \V{toproot},
-key \V{layerkey}): \\
+\textbf{redirect}(interiornode \(n\), key \V{k}, key \(k'\)): \\
+\> \(p \gets n\) \\
 ascend:~
-\> if \(n.\V{size} \neq 0\): \\
-\>\> \(\N{unlock}(n)\);~ return \\
-\> \(p \gets \N{locked\_parent}(n)\) \\
-\> if \(p = \NIL\): \\
-\>\> if \V{layerkey} is not empty: \\
-\>\>\> fork gclayer(\V{toproot}, \V{layerkey}) \\
-\>\> \(\N{unlock}(n)\);~ return \\
-\> \(i \gets \text{position of \(k\) in \(p\)}\) \\
-\> \(p.\V{child}[i] \gets n.\V{child}[0]\) \\
-\> \(n.\V{child}[0].\V{parent} \gets p\) \\
-\> \(n.\V{version}.\V{deleted} \gets 1\);~ fork \(\N{free\_node}(n)\) \\
-\> \(\N{unlock}(n)\);~ \(n \gets p\);~ goto ascend
+\> \(p' \gets \N{locked\_parent}(p)\) \\
+\> if \(p \neq n\): \\
+\>\> \(\N{unlock}(p)\) \\
+\> \(p \gets p'\) \\
+\> \(i \gets \text{position of \V{k} in \V{p}}\) \\
+\> if \(i > 0\): \\
+\>\> \(p.\V{kslice}[i - 1] \gets k'\) \\
+\> if \(i > 1\) or (\(i = 1\) and \(p.\V{child}[0] \neq \NIL\)): \\
+\>\> \(\N{unlock}(p)\);~ return \\
+\> goto ascend
 \end{programtabbing}
 \end{figure}
 
@@ -1348,20 +1350,20 @@ retry:~
 \> \(\V{layer} \gets n.\V{value}[\pi]\) \\
 \> if \(!\V{layer}.\V{isroot}\): \\
 \>\> \(\V{layer} \gets n.\V{value}[\pi] \gets \N{true\_root}(\V{layer})\) \\
-\> if \(\V{layer}.\V{size} > 0\) and \(\V{layer}.\V{isroot}\): \\
+\> if \(\V{layer}.\V{size} > 0\): \\
 \>\> \(\N{unlock}(n)\);~ return \\
 \> \(\N{lock}(\V{layer})\) \\
-\> if \(!\V{layer}.\V{isroot}\) and \(\V{layer}.\V{parent} = \NIL\): \\
-\>\> \(\V{layer}.\V{isroot} \gets 1\) \\
 \> if \(\V{layer}.\V{size} > 0\) or \(!\V{layer}.\V{isroot}\): \\
 \>\> \(\N{unlock}(\V{layer})\);~ \(\N{unlock}(\V{n})\);~ return \\
 \> if \(\V{layer}.\V{isleaf}\): \\
 \>\> \(\V{layer}.\V{deletedlayer} \gets 1\) \\
 \>\> \(\N{unlock}(\V{layer})\) \\
 \>\> \(\N{remove\_item}(n, i, \pi, \V{layerkey}, \V{toproot})\) \\
+\>\> fork \(\N{free\_node}(\V{layer})\) \\
 \>\> return \\
 \> else: \\
 \>\> \(\V{child} \gets \V{layer}.\V{child}[0]\) \\
+\>\> \(\V{child}.\V{isroot} \gets 1\) \\
 \>\> \(\V{child}.\V{parent} \gets \NIL\) \\
 \>\> \(n.\V{value}[\pi] \gets \V{child}\) \\
 \>\> \(\V{layer}.\V{isroot} \gets 0\) \\

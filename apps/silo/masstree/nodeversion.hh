@@ -18,14 +18,14 @@
 #include "compiler.hh"
 
 template <typename P>
-class basic_nodeversion {
+class nodeversion {
   public:
     typedef P traits_type;
     typedef typename P::value_type value_type;
 
-    basic_nodeversion() {
+    nodeversion() {
     }
-    explicit basic_nodeversion(bool isleaf) {
+    explicit nodeversion(bool isleaf) {
         v_ = isleaf ? (value_type) P::isleaf_bit : 0;
     }
 
@@ -33,11 +33,11 @@ class basic_nodeversion {
         return v_ & P::isleaf_bit;
     }
 
-    basic_nodeversion<P> stable() const {
+    nodeversion<P> stable() const {
         return stable(relax_fence_function());
     }
     template <typename SF>
-    basic_nodeversion<P> stable(SF spin_function) const {
+    nodeversion<P> stable(SF spin_function) const {
         value_type x = v_;
         while (x & P::dirty_mask) {
             spin_function();
@@ -47,10 +47,10 @@ class basic_nodeversion {
         return x;
     }
     template <typename SF>
-    basic_nodeversion<P> stable_annotated(SF spin_function) const {
+    nodeversion<P> stable_annotated(SF spin_function) const {
         value_type x = v_;
         while (x & P::dirty_mask) {
-            spin_function(basic_nodeversion<P>(x));
+            spin_function(nodeversion<P>(x));
             x = v_;
         }
         acquire_fence();
@@ -69,34 +69,35 @@ class basic_nodeversion {
     bool deleted() const {
         return v_ & P::deleted_bit;
     }
-    bool has_changed(basic_nodeversion<P> x) const {
+    bool has_changed(nodeversion<P> x) const {
         fence();
         return (x.v_ ^ v_) > P::lock_bit;
     }
-    bool has_split() const {
-        return !(v_ & P::root_bit);
+    bool is_root() const {
+        return v_ & P::root_bit;
     }
-    bool has_split(basic_nodeversion<P> x) const {
+    bool has_split(nodeversion<P> x) const {
         fence();
         return (x.v_ ^ v_) >= P::vsplit_lowbit;
     }
-    bool simple_has_split(basic_nodeversion<P> x) const {
+    bool simple_has_split(nodeversion<P> x) const {
         return (x.v_ ^ v_) >= P::vsplit_lowbit;
     }
 
-    basic_nodeversion<P> lock() {
+    nodeversion<P> lock() {
         return lock(*this);
     }
-    basic_nodeversion<P> lock(basic_nodeversion<P> expected) {
+    nodeversion<P> lock(nodeversion<P> expected) {
         return lock(expected, relax_fence_function());
     }
     template <typename SF>
-    basic_nodeversion<P> lock(basic_nodeversion<P> expected, SF spin_function) {
-        while (1) {
+    nodeversion<P> lock(nodeversion<P> expected, SF spin_function) {
+        while (true) {
             if (!(expected.v_ & P::lock_bit)
                 && bool_cmpxchg(&v_, expected.v_,
-                                expected.v_ | P::lock_bit))
+                                expected.v_ | P::lock_bit)) {
                 break;
+            }
             spin_function();
             expected.v_ = v_;
         }
@@ -107,10 +108,28 @@ class basic_nodeversion {
         return expected;
     }
 
+    bool try_lock() {
+        return try_lock(relax_fence_function());
+    }
+    template <typename SF>
+    bool try_lock(SF spin_function) {
+        value_type expected = v_;
+        if (!(expected & P::lock_bit)
+            && bool_cmpxchg(&v_, expected, expected | P::lock_bit)) {
+            masstree_invariant(!(expected & P::dirty_mask));
+            acquire_fence();
+            masstree_invariant((expected | P::lock_bit) == v_);
+            return true;
+        } else {
+            spin_function();
+            return false;
+        }
+    }
+
     void unlock() {
         unlock(*this);
     }
-    void unlock(basic_nodeversion<P> x) {
+    void unlock(nodeversion<P> x) {
         masstree_invariant((fence(), x.v_ == v_));
         masstree_invariant(x.v_ & P::lock_bit);
         if (x.v_ & P::splitting_bit)
@@ -126,7 +145,7 @@ class basic_nodeversion {
         v_ |= P::inserting_bit;
         acquire_fence();
     }
-    basic_nodeversion<P> mark_insert(basic_nodeversion<P> current_version) {
+    nodeversion<P> mark_insert(nodeversion<P> current_version) {
         masstree_invariant((fence(), v_ == current_version.v_));
         masstree_invariant(current_version.v_ & P::lock_bit);
         v_ = (current_version.v_ |= P::inserting_bit);
@@ -143,14 +162,14 @@ class basic_nodeversion {
         v_ |= (is_split + 1) << P::inserting_shift;
         acquire_fence();
     }
-    basic_nodeversion<P> mark_deleted() {
+    nodeversion<P> mark_deleted() {
         masstree_invariant(locked());
         v_ |= P::deleted_bit | P::splitting_bit;
         acquire_fence();
         return *this;
     }
     void mark_deleted_tree() {
-        masstree_invariant(locked() && !has_split());
+        masstree_invariant(locked() && is_root());
         v_ |= P::deleted_bit;
         acquire_fence();
     }
@@ -159,11 +178,12 @@ class basic_nodeversion {
         acquire_fence();
     }
     void mark_nonroot() {
+        masstree_invariant(locked());
         v_ &= ~P::root_bit;
         acquire_fence();
     }
 
-    void assign_version(basic_nodeversion<P> x) {
+    void assign_version(nodeversion<P> x) {
         v_ = x.v_;
     }
 
@@ -177,21 +197,21 @@ class basic_nodeversion {
   private:
     value_type v_;
 
-    basic_nodeversion(value_type v)
+    nodeversion(value_type v)
         : v_(v) {
     }
 };
 
 
 template <typename P>
-class basic_singlethreaded_nodeversion {
+class singlethreaded_nodeversion {
   public:
     typedef P traits_type;
     typedef typename P::value_type value_type;
 
-    basic_singlethreaded_nodeversion() {
+    singlethreaded_nodeversion() {
     }
-    explicit basic_singlethreaded_nodeversion(bool isleaf) {
+    explicit singlethreaded_nodeversion(bool isleaf) {
         v_ = isleaf ? (value_type) P::isleaf_bit : 0;
     }
 
@@ -199,15 +219,15 @@ class basic_singlethreaded_nodeversion {
         return v_ & P::isleaf_bit;
     }
 
-    basic_singlethreaded_nodeversion<P> stable() const {
+    singlethreaded_nodeversion<P> stable() const {
         return *this;
     }
     template <typename SF>
-    basic_singlethreaded_nodeversion<P> stable(SF) const {
+    singlethreaded_nodeversion<P> stable(SF) const {
         return *this;
     }
     template <typename SF>
-    basic_singlethreaded_nodeversion<P> stable_annotated(SF) const {
+    singlethreaded_nodeversion<P> stable_annotated(SF) const {
         return *this;
     }
 
@@ -223,38 +243,46 @@ class basic_singlethreaded_nodeversion {
     bool deleted() const {
         return false;
     }
-    bool has_changed(basic_singlethreaded_nodeversion<P>) const {
+    bool has_changed(singlethreaded_nodeversion<P>) const {
         return false;
     }
-    bool has_split() const {
-        return !(v_ & P::root_bit);
+    bool is_root() const {
+        return v_ & P::root_bit;
     }
-    bool has_split(basic_singlethreaded_nodeversion<P>) const {
+    bool has_split(singlethreaded_nodeversion<P>) const {
         return false;
     }
-    bool simple_has_split(basic_singlethreaded_nodeversion<P>) const {
+    bool simple_has_split(singlethreaded_nodeversion<P>) const {
         return false;
     }
 
-    basic_singlethreaded_nodeversion<P> lock() {
+    singlethreaded_nodeversion<P> lock() {
         return *this;
     }
-    basic_singlethreaded_nodeversion<P> lock(basic_singlethreaded_nodeversion<P>) {
+    singlethreaded_nodeversion<P> lock(singlethreaded_nodeversion<P>) {
         return *this;
     }
     template <typename SF>
-    basic_singlethreaded_nodeversion<P> lock(basic_singlethreaded_nodeversion<P>, SF) {
+    singlethreaded_nodeversion<P> lock(singlethreaded_nodeversion<P>, SF) {
         return *this;
+    }
+
+    bool try_lock() {
+        return true;
+    }
+    template <typename SF>
+    bool try_lock(SF) {
+        return true;
     }
 
     void unlock() {
     }
-    void unlock(basic_singlethreaded_nodeversion<P>) {
+    void unlock(singlethreaded_nodeversion<P>) {
     }
 
     void mark_insert() {
     }
-    basic_singlethreaded_nodeversion<P> mark_insert(basic_singlethreaded_nodeversion<P>) {
+    singlethreaded_nodeversion<P> mark_insert(singlethreaded_nodeversion<P>) {
         return *this;
     }
     void mark_split() {
@@ -264,7 +292,7 @@ class basic_singlethreaded_nodeversion {
         if (is_split)
             mark_split();
     }
-    basic_singlethreaded_nodeversion<P> mark_deleted() {
+    singlethreaded_nodeversion<P> mark_deleted() {
         return *this;
     }
     void mark_deleted_tree() {
@@ -277,7 +305,7 @@ class basic_singlethreaded_nodeversion {
         v_ &= ~P::root_bit;
     }
 
-    void assign_version(basic_singlethreaded_nodeversion<P> x) {
+    void assign_version(singlethreaded_nodeversion<P> x) {
         v_ = x.v_;
     }
 
@@ -293,7 +321,9 @@ class basic_singlethreaded_nodeversion {
 };
 
 
-struct nodeversion32_parameters {
+template <typename V> struct nodeversion_parameters {};
+
+template <> struct nodeversion_parameters<uint32_t> {
     enum {
         lock_bit = (1U << 0),
         inserting_shift = 1,
@@ -314,8 +344,7 @@ struct nodeversion32_parameters {
     typedef uint32_t value_type;
 };
 
-
-struct nodeversion64_parameters {
+template <> struct nodeversion_parameters<uint64_t> {
     enum {
         lock_bit = (1ULL << 8),
         inserting_shift = 9,
@@ -336,8 +365,6 @@ struct nodeversion64_parameters {
     typedef uint64_t value_type;
 };
 
-
-typedef basic_nodeversion<nodeversion32_parameters> nodeversion;
-typedef basic_singlethreaded_nodeversion<nodeversion32_parameters> singlethreaded_nodeversion;
+typedef nodeversion<nodeversion_parameters<uint32_t> > nodeversion32;
 
 #endif

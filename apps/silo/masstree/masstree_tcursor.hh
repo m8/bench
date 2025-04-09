@@ -15,7 +15,7 @@
  */
 #ifndef MASSTREE_TCURSOR_HH
 #define MASSTREE_TCURSOR_HH 1
-#include "local_vector.hh"
+#include "small_vector.hh"
 #include "masstree_key.hh"
 #include "masstree_struct.hh"
 namespace Masstree {
@@ -103,7 +103,7 @@ class tcursor {
     typedef typename nodeversion_type::value_type nodeversion_value_type;
     typedef typename P::threadinfo_type threadinfo;
     static constexpr int new_nodes_size = 1; // unless we make a new trie newnodes will have at most 1 item
-    typedef local_vector<std::pair<leaf_type*, nodeversion_value_type>, new_nodes_size> new_nodes_type;
+    typedef small_vector<std::pair<leaf_type*, nodeversion_value_type>, new_nodes_size> new_nodes_type;
 
     tcursor(basic_table<P>& table, Str str)
         : ka_(str), root_(table.fix_root()) {
@@ -124,7 +124,7 @@ class tcursor {
     inline bool has_value() const {
         return kx_.p >= 0;
     }
-    inline value_type &value() const {
+    inline value_type& value() const {
         return n_->lv_[kx_.p].value();
     }
 
@@ -135,14 +135,8 @@ class tcursor {
     inline leaf<P>* node() const {
         return n_;
     }
-    inline kvtimestamp_t node_timestamp() const {
-        return n_->node_ts_;
-    }
-    inline kvtimestamp_t &node_timestamp() {
-        return n_->node_ts_;
-    }
 
-    inline leaf_type *original_node() const {
+    inline leaf_type* original_node() const {
         return original_n_;
     }
 
@@ -167,13 +161,13 @@ class tcursor {
     inline nodeversion_value_type next_full_version_value(int state) const;
 
   private:
-    leaf_type *n_;
+    leaf_type* n_;
     key_type ka_;
     key_indexed_position kx_;
     node_base<P>* root_;
     int state_;
 
-    leaf_type *original_n_;
+    leaf_type* original_n_;
     nodeversion_value_type original_v_;
     nodeversion_value_type updated_v_;
     new_nodes_type new_nodes_;
@@ -185,11 +179,12 @@ class tcursor {
 
     bool make_new_layer(threadinfo& ti);
     bool make_split(threadinfo& ti);
+    friend class leaf<P>;
     inline void finish_insert();
     inline bool finish_remove(threadinfo& ti);
 
-    static void collapse(internode_type* p, ikey_type ikey,
-                         node_type* root, Str prefix, threadinfo& ti);
+    static void redirect(internode_type* n, ikey_type ikey,
+                         ikey_type replacement, threadinfo& ti);
     /** Remove @a leaf from the Masstree rooted at @a rootp.
      * @param prefix String defining the path to the tree containing this leaf.
      *   If removing a leaf in layer 0, @a prefix is empty.

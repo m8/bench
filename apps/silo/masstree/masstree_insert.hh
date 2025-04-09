@@ -151,31 +151,5 @@ inline void tcursor<P>::finish(int state, threadinfo& ti)
     n_->unlock();
 }
 
-template <typename P> template <typename F>
-inline int basic_table<P>::modify(Str key, F& f, threadinfo& ti)
-{
-    tcursor<P> lp(*this, key);
-    bool found = lp.find_locked(ti);
-    int answer;
-    if (found)
-        answer = f(key, true, lp.value(), ti, lp.node_timestamp());
-    else
-        answer = 0;
-    lp.finish(answer, ti);
-    return answer;
-}
-
-template <typename P> template <typename F>
-inline int basic_table<P>::modify_insert(Str key, F& f, threadinfo& ti)
-{
-    tcursor<P> lp(*this, key);
-    bool found = lp.find_insert(ti);
-    if (!found)
-        ti.advance_timestamp(lp.node_timestamp());
-    int answer = f(key, found, lp.value(), ti, lp.node_timestamp());
-    lp.finish(answer, ti);
-    return answer;
-}
-
 } // namespace Masstree
 #endif
