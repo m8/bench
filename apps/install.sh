@@ -1,7 +1,21 @@
 #!/bin/bash
 mkdir -p bin
 
-installs="silo"
+installs="hashjoin"
+
+# ===============
+# == Hash Join ==
+# ===============
+if [[ $installs =~ "hashjoin" ]]; then
+pushd hashjoin
+make clean
+make -j8
+cp hashjoin ../bin/hashjoin
+cp hashjoin ../bin/hashjoin2
+popd
+fi
+# ===============
+
 
 # ================
 # == XSBench ==
