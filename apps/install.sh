@@ -3,6 +3,18 @@ mkdir -p bin
 
 installs="hashjoin"
 
+# ================
+# == Multichase ==
+# ================
+if [[ $installs =~ "multichase" ]]; then
+pushd multichase
+make clean && make -j8
+cp multichase ../bin/multichase
+cp multiload ../bin/multiload
+popd
+fi
+# ================
+
 # ===============
 # == Hash Join ==
 # ===============
