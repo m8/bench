@@ -1,0 +1,40 @@
+PARSEC Compile Information
+==========================
+Package 'splash2x.volrend'
+Built on Tue Apr 15 09:35:13 AM UTC 2025
+
+Configure arguments:  --prefix=/home/unal/Documents/memory_behaviors/bench/apps/parsec/ext/splash2x/apps/volrend/inst/x86_64-linux.gcc.gcc
+
+Environment modifications: version=pthreads
+
+CC: /usr/bin/gcc-9
+Version: gcc-9 (Ubuntu 9.5.0-1ubuntu1~22.04) 9.5.0
+Copyright (C) 2019 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+CFLAGS:  -O3 -g -funroll-loops -fprefetch-loop-arrays -static-libgcc -Wl,--hash-style=both,--as-needed -DPARSEC_VERSION=3.0-beta-20120904
+
+CXX: /usr/bin/g++-9
+Version: g++-9 (Ubuntu 9.5.0-1ubuntu1~22.04) 9.5.0
+Copyright (C) 2019 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+CXXFLAGS: -O3 -g -funroll-loops -fprefetch-loop-arrays -fpermissive -fno-exceptions -static-libgcc -Wl,--hash-style=both,--as-needed -DPARSEC_VERSION=3.0-beta-20120904
+
+CCAS: 
+Version: 
+CCASFLAGS: 
+
+LD: /usr/bin/ld
+Version: GNU ld (GNU Binutils for Ubuntu) 2.38
+Copyright (C) 2022 Free Software Foundation, Inc.
+This program is free software; you may redistribute it under the terms of
+the GNU General Public License version 3 or (at your option) a later version.
+This program has absolutely no warranty.
+LDFLAGS: -L/usr/lib64 -L/usr/lib
+
+JAVAC: /usr/bin/javac
+Version: javac 11.0.26
+JFLAGS: 
+
+[EOF]
