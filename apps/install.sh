@@ -4,6 +4,19 @@ mkdir -p bin
 installs="hashjoin"
 
 # ================
+# == Liblinear  ==
+# ================
+if [[ $installs =~ "liblinear" ]]; then
+pushd liblinear
+make clean
+make -j8
+cp train ../bin/liblinear_train
+cp predict ../bin/liblinear_predict
+popd
+fi
+# ================
+
+# ================
 # == Multichase ==
 # ================
 if [[ $installs =~ "multichase" ]]; then
