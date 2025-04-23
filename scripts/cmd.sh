@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# ==================
+# GAPBS CMDs
+# ==================
+numactl --membind 0 --cpunodebind 0 bin/gapbs bfs -n 1000000 -e 10000000 -p 16 -r 1
+numactl --membind 0 --cpunodebind 0 bin/gapbs pr -g 29 -n 20 -i 20
+numactl --membind 0 --cpunodebind 0 bin/gapbs cc -g 29 -n 20 -i 20
 
 # ==============
 # NAS CMDs
@@ -42,4 +48,22 @@ numactl --membind 0 --cpunodebind 0 bin/XSBench
 # ==============
 # GUPS CMDs
 # ==============
-numactl --membind 0 --cpunodebind 0 bin/gupstoy
+numactl --membind 0 --cpunodebind 0 bin/gupstoy 32 5000000 1024
+
+
+# ==============
+# Parsec CMDs
+# ==============
+# -p: thread count
+numactl --membind 0 --cpunodebind 0 bin/parsec_ocean_cp -n4098 -p 16 -e1e-07 -r10000 -t14400
+numactl --membind 0 --cpunodebind 0 bin/parsec_ocean_ncp -n4098 -p 16 -e1e-07 -r10000 -t14400
+
+
+# ==============
+# Multichase CMDs
+# ==============
+numactl --membind 0 --cpunodebind 0 ./multichase -m 2147483648 -s64;
+numactl --membind 0 --cpunodebind 0 ./multichase -m 2147483648 -s64 -o;
+
+numactl --membind 2 --cpunodebind 0 ./multichase -m 2147483648 -s64;
+numactl --membind 2 --cpunodebind 0 ./multichase -m 2147483648 -s64 -o;

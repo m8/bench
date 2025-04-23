@@ -1,7 +1,62 @@
 #!/bin/bash
 mkdir -p bin
 
-installs="hashjoin"
+APPS_DIR="/home/unal/Documents/memory_behaviors/bench/apps"
+
+if [ -z "$APPS_DIR" ]; then
+    echo "APPS_DIR is not set."
+    exit 1
+fi
+
+cd $APPS_DIR
+mkdir -p bin
+
+installs="gups xsbench parsec"
+
+# ================
+# == Gapbs  ==
+# ================
+if [[ $installs =~ "gapbs" ]]; then
+pushd gapbs
+make clean
+make -j16
+cp bfs ../bin/gapbs_bfs
+cp pr ../bin/gapbs_pr
+cp cc ../bin/gapbs_cc
+cp sssp ../bin/gapbs_sssp
+cp tc ../bin/gapbs_tc
+popd
+fi
+
+
+# ================
+# == Parsec  ==
+# ================
+if [[ $installs =~ "parsec" ]]; then
+pushd parsec
+
+source env.sh
+export PARSECPLAT=x86_64-linux.gcc
+export PARSECDIR=$(pwd)
+for bench in streamcluster blackscholes canneal facesim fluidanimate \
+    freqmine raytrace vips x264
+do
+    parsecmgmt -a build -p "$bench"
+    cp pkgs/apps/$bench/inst/x86_64-linux.gcc.gcc/bin/$bench ../bin/parsec_$bench
+    cp pkgs/kernels/$bench/inst/x86_64-linux.gcc.gcc/bin/$bench ../bin/parsec_$bench
+done
+
+# Spash2x Benchmarks
+for bench in barnes fft lu_cb lu_ncb ocean_cp ocean_ncp \
+    radiosity radix volrend water_nsquared water_spatial
+do
+    parsecmgmt -a build -p "splash2x.$bench"
+    cp ext/splash2x/apps/$bench/inst/x86_64-linux.gcc.gcc/bin/$bench ../bin/parsec_$bench
+    cp ext/splash2x/kernels/$bench/inst/x86_64-linux.gcc.gcc/bin/$bench ../bin/parsec_$bench
+done
+
+popd
+fi
 
 # ================
 # == Liblinear  ==
@@ -125,5 +180,5 @@ pushd gups
 make clean
 make -j8
 cp gupstoy ../bin/gupstoy
-cp gups ../bin/gups
+# cp gups ../bin/gups
 fi
