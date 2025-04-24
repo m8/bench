@@ -11,7 +11,7 @@ fi
 cd $APPS_DIR
 mkdir -p bin
 
-installs="gups xsbench parsec"
+installs="nas"
 
 # ================
 # == Gapbs  ==
@@ -130,7 +130,7 @@ fi
 # ===============
 if [[ $installs =~ "nas" ]]; then
 pushd nas/NPB3.4-OMP
-benchs="bt cg ep ft is lu mg sp ua dc"
+benchs="mg bt cg ep ft is lu sp ua dc"
 workloads="D"
 # workloads="E D F"
 for bench in $benchs; do

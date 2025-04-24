@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=gnu99 -Wall -O3
-LDFLAGS=-lm
+LDFLAGS=-lm -lnuma
 
 all:
 	$(CC) $(CFLAGS) -fopenmp -o hashjoin hashjoin.c murmurhash.c $(LDFLAGS)

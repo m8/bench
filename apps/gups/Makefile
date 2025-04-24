@@ -1,8 +1,7 @@
 CC=gcc
 CFLAGS=-std=gnu99 -Wall -O3
 
-all: gups gupstoy
-	$(CC) $(CFLAGS) -o gups gups.c -fopenmp
+all: gupstoy
 	$(CC) $(CFLAGS) -o gupstoy gupstoy.c -fopenmp
 
 clean:

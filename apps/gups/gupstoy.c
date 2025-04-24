@@ -157,8 +157,9 @@ int main(int argc, char *argv[])
         (time2.tv_nsec - time1.tv_nsec) / 1e9;
     printf("Elapsed time: %f seconds\n", elapsed);
     printf("Update cnt: %zu\n", NUPDATE);
-    printf("GUPS: %f GUPS\n", (double)NUPDATE / elapsed / 1e9);
-
+    printf("aGUPS: %f GUPS\n", (double)NUPDATE / elapsed / 1e9);
+    size_t num_threads = omp_get_num_threads();
+    printf("GUPS: %f GUPS\n", (((double)NUPDATE / 128) / elapsed / 1e9) *  num_threads);
     free(Table);
 
     return 0;

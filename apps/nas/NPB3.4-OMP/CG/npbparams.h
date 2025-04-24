@@ -16,7 +16,7 @@
         logical  convertdouble
         parameter (convertdouble = .false.)
         character compiletime*11
-        parameter (compiletime='09 Apr 2025')
+        parameter (compiletime='23 Apr 2025')
         character npbversion*5
         parameter (npbversion='3.4.3')
         character cs1*8
