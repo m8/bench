@@ -1,15 +1,45 @@
-# Memory Intensive Benchmarking Suite (MIBS)
+# Bench
 
-Benchmarks for understanding memory related bottleneceks and optimizations.
+Collection of various benchmarks.
 
-install:
-```bash 
-cd install
-APP_DIR=../app_dir bash gapbs.sh
 ```
-
-usage:
-```bash
-cd runners
-source gapbs.sh && gapbs_pr && gapbs_parser
+- Btree
+- BWA
+- GAPBS
+    - pr
+    - bc
+    - sssp
+    - bfs
+    - cc
+- Graph500
+    - omp-csr (compressed-sparse-row )
+- HashJoin
+- Liblinear
+    - train
+    - predict
+- Gups
+- Metis
+    - kmeans
+    - hist
+    - matrix_mult
+    - pca
+    - wr
+    - linear_regression
+    - string_match
+- Multichase
+    - multiload
+    - multichase
+- NAS
+    - bt
+    - cg
+    - ep
+    - lu
+    - sp
+    - mg
+    - is
+- Silo
+    - YCSB
+    - TPCC
+- Stream
+- XSBench
 ```
