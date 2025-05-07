@@ -102,6 +102,18 @@ void c_print_results( char   *name,
     printf( "    CLINKFLAGS   = %s\n", clinkflags );
 
     printf( "\n\n" );
+    printf("==============\n");
+    printf("== mbench ==\n");
+    printf("==============\n");
+    printf("secs: %f\n", t);
+    printf("work: %f\n", mops);
+    printf("work_type: MOP/s\n");
+    printf("===============\n");
+    printf("===============\n");
+
+
+
+    printf( "\n\n" );
     printf( " Please send all errors/feedbacks to:\n\n" );
     printf( " NPB Development Team\n" );
     printf( " npb@nas.nasa.gov\n\n\n" );

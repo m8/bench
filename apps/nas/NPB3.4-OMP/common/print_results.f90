@@ -130,6 +130,17 @@
 !     >            ' Moffett Field, CA  94035-1000'//
 !     >            ' Fax: 650-604-3957'//)
 
+write (*,*)
+write (*,*)"=============="
+write (*,*)"== mbench =="
+write (*,*)"=============="
+write (*,'(A,F10.4)') "secs: ", t
+write (*,99) mops
+ 99      format('work: ', f12.4)
+write (*,*) "work_type: MOP/s"
+write (*,*) "==============="
+write (*,*) "==============="
+
 
          return
          end
