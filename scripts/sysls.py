@@ -218,7 +218,8 @@ def collect_all():
         "sysctl": collect_sysctl(),
     }
 
-output_file = sys.argv[1] if len(sys.argv) > 1 else "stats.json"
-data = collect_all()
-with open(output_file, "w") as f:
-    json.dump(data, f, indent=2)
+if __name__ == "__main__":
+    output_file = sys.argv[1] if len(sys.argv) > 1 else "stats.json"
+    data = collect_all()
+    with open(output_file, "w") as f:
+        json.dump(data, f, indent=2)
