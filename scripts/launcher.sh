@@ -1,7 +1,0 @@
-#!/bin/bash
-INTERLEAVE=0
-
-NUMA_CPU=0
-NUMA_MEM=0
-THREAD_CNT=28
-
